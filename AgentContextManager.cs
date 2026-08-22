@@ -129,54 +129,13 @@ public class AgentContextManager
                             onToolStart?.Invoke(toolCall.Id, toolCall.FunctionName, argsStr);
 
                             var args = JsonSerializer.Deserialize<JsonElement>(argsStr);
-
-                            switch (toolCall.FunctionName)
-                            {
-                                case "read_file":
-                                    toolResult = NativeTools.ReadFile(ResolvePath(args.GetProperty("filePath").GetString() ?? ""));
-                                    if (toolResult.StartsWith("Error")) success = false;
-                                    break;
-                                case "write_file":
-                                    toolResult = NativeTools.WriteFile(
-                                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
-                                        args.GetProperty("content").GetString() ?? "");
-                                    if (toolResult.StartsWith("Error")) success = false;
-                                    break;
-                                case "patch_file":
-                                    toolResult = NativeTools.PatchFile(
-                                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
-                                        args.GetProperty("targetSnippet").GetString() ?? "", 
-                                        args.GetProperty("replacementSnippet").GetString() ?? "");
-                                    if (toolResult.StartsWith("Error")) success = false;
-                                    break;
-                                case "list_directory":
-                                    string dirPath = args.TryGetProperty("directoryPath", out var p) ? p.GetString() ?? WorkspaceDirectory : WorkspaceDirectory;
-                                    toolResult = NativeTools.ListDirectory(ResolvePath(dirPath), GetIntProperty(args, "maxDepth", 3));
-                                    if (toolResult.StartsWith("Error")) success = false;
-                                    break;
-                                case "search_code":
-                                    toolResult = NativeTools.SearchCode(
-                                        WorkspaceDirectory,
-                                        args.GetProperty("searchQuery").GetString() ?? "",
-                                        args.TryGetProperty("fileExtensionFilter", out var fe) ? fe.GetString() : "*.*");
-                                    if (toolResult.StartsWith("Error")) success = false;
-                                    break;
-                                case "execute_terminal":
-                                    toolResult = NativeTools.ExecuteTerminalSafe(
-                                        args.GetProperty("command").GetString() ?? "",
-                                        args.TryGetProperty("workingDirectory", out var wd) ? (string.IsNullOrWhiteSpace(wd.GetString()) ? WorkspaceDirectory : wd.GetString()) : WorkspaceDirectory,
-                                        GetIntProperty(args, "timeoutSeconds", 45));
-                                    if (toolResult.StartsWith("Failed") || toolResult.Contains("TIMED OUT")) success = false;
-                                    break;
-                                default:
-                                    toolResult = $"Unknown tool: {toolCall.FunctionName}";
-                                    success = false;
-                                    break;
-                            }
+                            var execution = ExecuteTool(toolCall.FunctionName, args);
+                            toolResult = execution.result;
+                            success = execution.success;
                         }
                         catch (Exception ex)
                         {
-                            toolResult = $"Error executing tool: {ex.Message}";
+                            toolResult = $"Error parsing tool args: {ex.Message}";
                             success = false;
                         }
 
@@ -191,6 +150,31 @@ public class AgentContextManager
                 {
                     _apiHistory.Add(new AssistantChatMessage(completion));
                     finalResponse = completion.Content[0].Text;
+                    
+                    if (finalResponse.TrimStart().StartsWith("{") && finalResponse.Contains("\"name\"") && finalResponse.Contains("\"parameters\""))
+                    {
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(finalResponse);
+                            var root = doc.RootElement;
+                            if (root.TryGetProperty("name", out var nameProp) && root.TryGetProperty("parameters", out var paramsProp))
+                            {
+                                string toolName = nameProp.GetString() ?? "";
+                                string argsStr = paramsProp.ToString();
+                                string toolId = "fallback_" + Guid.NewGuid().ToString().Substring(0, 8);
+                                
+                                onToolStart?.Invoke(toolId, toolName, argsStr);
+                                var execution = ExecuteTool(toolName, paramsProp);
+                                onToolEnd?.Invoke(toolId, execution.result, execution.success);
+                                
+                                _apiHistory.Add(new UserChatMessage($"[Tool Execution Result]:\n{execution.result}"));
+                                requiresAction = true;
+                                continue;
+                            }
+                        }
+                        catch { }
+                    }
+
                     PruneContextIfNecessary();
                 }
             }
@@ -202,6 +186,68 @@ public class AgentContextManager
         }
         
         return finalResponse;
+    }
+    
+    private (string result, bool success) ExecuteTool(string toolName, JsonElement args)
+    {
+        string toolResult = string.Empty;
+        bool success = true;
+        try
+        {
+            switch (toolName)
+            {
+                case "read_file":
+                    toolResult = NativeTools.ReadFile(ResolvePath(args.GetProperty("filePath").GetString() ?? ""));
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "write_file":
+                    toolResult = NativeTools.WriteFile(
+                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
+                        args.GetProperty("content").GetString() ?? "");
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "patch_file":
+                    toolResult = NativeTools.PatchFile(
+                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
+                        args.GetProperty("targetSnippet").GetString() ?? "", 
+                        args.GetProperty("replacementSnippet").GetString() ?? "");
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "list_directory":
+                    string dirPath = args.TryGetProperty("directoryPath", out var p) ? p.GetString() ?? WorkspaceDirectory : WorkspaceDirectory;
+                    toolResult = NativeTools.ListDirectory(ResolvePath(dirPath), GetIntProperty(args, "maxDepth", 3));
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "search_code":
+                    toolResult = NativeTools.SearchCode(
+                        WorkspaceDirectory,
+                        args.GetProperty("searchQuery").GetString() ?? "",
+                        args.TryGetProperty("fileExtensionFilter", out var fe) ? fe.GetString() : "*.*");
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "execute_terminal":
+                    string wdPath = args.TryGetProperty("workingDirectory", out var wd) ? wd.GetString() : null;
+                    string resolvedWd = ResolvePath(wdPath);
+                    if (System.IO.File.Exists(resolvedWd)) resolvedWd = System.IO.Path.GetDirectoryName(resolvedWd);
+
+                    toolResult = NativeTools.ExecuteTerminalSafe(
+                        args.GetProperty("command").GetString() ?? "",
+                        resolvedWd,
+                        GetIntProperty(args, "timeoutSeconds", 45));
+                    if (toolResult.StartsWith("Failed") || toolResult.Contains("TIMED OUT")) success = false;
+                    break;
+                default:
+                    toolResult = $"Unknown tool: {toolName}";
+                    success = false;
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            toolResult = $"Error executing tool: {ex.Message}";
+            success = false;
+        }
+        return (toolResult, success);
     }
     
     private void PruneContextIfNecessary()

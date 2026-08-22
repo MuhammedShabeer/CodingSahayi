@@ -34,6 +34,7 @@ Follow these operational guidelines:
 4. After writing or modifying code, execute the build command via PowerShell to verify that there are no compilation errors.
 5. If a build fails or a tool returns an error, inspect the error output, diagnose the issue, and apply a fix immediately before reporting back to the user.
 CRITICAL: You must only execute ONE tool call at a time. Never attempt to use multiple tools in a single response.
+CRITICAL: You must invoke tools using the native tool calling API. Do NOT output raw JSON block tool calls in your standard chat response.
 """;
         set => LocalSettings.Values["SystemPrompt"] = value;
     }
