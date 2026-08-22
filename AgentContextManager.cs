@@ -23,7 +23,10 @@ public class AgentContextManager
 
     public AgentContextManager()
     {
-        _chatOptions = new ChatCompletionOptions();
+        _chatOptions = new ChatCompletionOptions
+        {
+            AllowParallelToolCalls = false
+        };
         _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
             "read_file",
             "Reads a file from the disk.",

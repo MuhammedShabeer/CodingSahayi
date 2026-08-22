@@ -10,8 +10,8 @@
 
   <Identity
     Name="163A6156-3219-4F3A-9F99-1798EF4FF467"
-    Publisher="CN=AppPublisher"
-    Version="1.0.0.0" />
+    Publisher="CN=MuhammedShabeer"
+    Version="1.0.1.0" />
 
   <mp:PhoneIdentity PhoneProductId="163A6156-3219-4F3A-9F99-1798EF4FF467" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
