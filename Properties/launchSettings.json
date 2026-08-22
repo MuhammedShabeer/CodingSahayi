@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "CodingSahayi (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "CodingSahayi (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

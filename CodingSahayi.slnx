@@ -1,0 +1,18 @@
+<Solution>
+  <Properties Name="Configuration">
+    <Property Name="Debug|x64" />
+    <Property Name="Release|x64" />
+    <Property Name="Debug|x86" />
+    <Property Name="Release|x86" />
+    <Property Name="Debug|ARM64" />
+    <Property Name="Release|ARM64" />
+  </Properties>
+  <Project Path="CodingSahayi.csproj">
+    <Configuration Solution="Debug|x64" Project="Debug|x64" />
+    <Configuration Solution="Release|x64" Project="Release|x64" />
+    <Configuration Solution="Debug|x86" Project="Debug|x86" />
+    <Configuration Solution="Release|x86" Project="Release|x86" />
+    <Configuration Solution="Debug|ARM64" Project="Debug|ARM64" />
+    <Configuration Solution="Release|ARM64" Project="Release|ARM64" />
+  </Project>
+</Solution>
