@@ -151,7 +151,7 @@ public class AgentContextManager
                                     break;
                                 case "list_directory":
                                     string dirPath = args.TryGetProperty("directoryPath", out var p) ? p.GetString() ?? WorkspaceDirectory : WorkspaceDirectory;
-                                    toolResult = NativeTools.ListDirectory(ResolvePath(dirPath), args.TryGetProperty("maxDepth", out var md) ? md.GetInt32() : 3);
+                                    toolResult = NativeTools.ListDirectory(ResolvePath(dirPath), GetIntProperty(args, "maxDepth", 3));
                                     if (toolResult.StartsWith("Error")) success = false;
                                     break;
                                 case "search_code":
@@ -165,7 +165,7 @@ public class AgentContextManager
                                     toolResult = NativeTools.ExecuteTerminalSafe(
                                         args.GetProperty("command").GetString() ?? "",
                                         args.TryGetProperty("workingDirectory", out var wd) ? (string.IsNullOrWhiteSpace(wd.GetString()) ? WorkspaceDirectory : wd.GetString()) : WorkspaceDirectory,
-                                        args.TryGetProperty("timeoutSeconds", out var ts) ? ts.GetInt32() : 45);
+                                        GetIntProperty(args, "timeoutSeconds", 45));
                                     if (toolResult.StartsWith("Failed") || toolResult.Contains("TIMED OUT")) success = false;
                                     break;
                                 default:
@@ -223,5 +223,15 @@ public class AgentContextManager
     {
         if (string.IsNullOrWhiteSpace(path)) return WorkspaceDirectory;
         return System.IO.Path.IsPathRooted(path) ? path : System.IO.Path.Combine(WorkspaceDirectory, path);
+    }
+
+    private int GetIntProperty(JsonElement element, string propertyName, int defaultValue)
+    {
+        if (element.TryGetProperty(propertyName, out var prop))
+        {
+            if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out int num)) return num;
+            if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString(), out int strNum)) return strNum;
+        }
+        return defaultValue;
     }
 }
