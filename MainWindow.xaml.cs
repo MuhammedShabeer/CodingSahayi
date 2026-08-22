@@ -139,7 +139,7 @@ public sealed partial class MainWindow : Window
     private void ClearChat_Click(object sender, RoutedEventArgs e) 
     { 
         ChatHistory.Clear(); 
-        ChatHistory.Add(new TextMessageModel { Role = "Agent", Content = "Hello! I am an AI coding assistant. Type a message to ask me a question or request a coding action. Use the \"Select Workspace\" button above to choose a folder containing your code project.\r\n\r\nPlease note that this application can only interact with files in the selected workspace. If you need to access files outside of this workspace, you will need to create a new project or modify an existing one within the workspace.\r\n\r\nWhat can I help you with today?", Alignment = HorizontalAlignment.Left, BackgroundBrush = AgentBrush }); 
+        ChatHistory.Add(new TextMessageModel { Role = "Agent", Content = "Hello! I am an AI coding assistant. Type a message to ask me a question or request a coding action. Use the \"Select Workspace\" button above to choose a folder containing your code project.\r\n\r\nWhat can I help you with today?", Alignment = HorizontalAlignment.Left, BackgroundBrush = AgentBrush }); 
     }
 
     private void ScrollToBottom()

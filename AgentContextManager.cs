@@ -95,7 +95,7 @@ public class AgentContextManager
         Action<string> onStatusUpdate, 
         ToolStartHandler onToolStart,
         ToolEndHandler onToolEnd,
-        int maxIterations = 15)
+        int maxIterations = 30)
     {
         _apiHistory.Add(new UserChatMessage(userMessage));
         PruneContextIfNecessary();
