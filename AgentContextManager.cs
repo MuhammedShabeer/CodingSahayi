@@ -133,25 +133,25 @@ public class AgentContextManager
                             switch (toolCall.FunctionName)
                             {
                                 case "read_file":
-                                    toolResult = NativeTools.ReadFile(args.GetProperty("filePath").GetString() ?? "");
+                                    toolResult = NativeTools.ReadFile(ResolvePath(args.GetProperty("filePath").GetString() ?? ""));
                                     if (toolResult.StartsWith("Error")) success = false;
                                     break;
                                 case "write_file":
                                     toolResult = NativeTools.WriteFile(
-                                        args.GetProperty("filePath").GetString() ?? "", 
+                                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
                                         args.GetProperty("content").GetString() ?? "");
                                     if (toolResult.StartsWith("Error")) success = false;
                                     break;
                                 case "patch_file":
                                     toolResult = NativeTools.PatchFile(
-                                        args.GetProperty("filePath").GetString() ?? "", 
+                                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
                                         args.GetProperty("targetSnippet").GetString() ?? "", 
                                         args.GetProperty("replacementSnippet").GetString() ?? "");
                                     if (toolResult.StartsWith("Error")) success = false;
                                     break;
                                 case "list_directory":
                                     string dirPath = args.TryGetProperty("directoryPath", out var p) ? p.GetString() ?? WorkspaceDirectory : WorkspaceDirectory;
-                                    toolResult = NativeTools.ListDirectory(dirPath, args.TryGetProperty("maxDepth", out var md) ? md.GetInt32() : 3);
+                                    toolResult = NativeTools.ListDirectory(ResolvePath(dirPath), args.TryGetProperty("maxDepth", out var md) ? md.GetInt32() : 3);
                                     if (toolResult.StartsWith("Error")) success = false;
                                     break;
                                 case "search_code":
@@ -217,5 +217,11 @@ public class AgentContextManager
                 _apiHistory.RemoveAt(1);
             }
         }
+    }
+
+    private string ResolvePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return WorkspaceDirectory;
+        return System.IO.Path.IsPathRooted(path) ? path : System.IO.Path.Combine(WorkspaceDirectory, path);
     }
 }
