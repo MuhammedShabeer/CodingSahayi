@@ -8,6 +8,7 @@ public static class SettingsManager
 {
     private const string ResourceName = "VibeCoderAgent";
     private const string ApiKeyUserName = "ApiKey";
+    private const int PromptVersion = 2; // Bump this when the default prompt changes
     
     private static readonly ApplicationDataContainer LocalSettings = ApplicationData.Current.LocalSettings;
 
@@ -23,9 +24,7 @@ public static class SettingsManager
         set => LocalSettings.Values["ModelName"] = value;
     }
 
-    public static string SystemPrompt
-    {
-        get => LocalSettings.Values["SystemPrompt"] as string ?? """
+    private const string DefaultSystemPrompt = """
 You are an expert native Windows coding agent operating inside a WinUI 3 IDE called Coding Sahayi.
 
 OPERATIONAL RULES:
@@ -35,6 +34,7 @@ OPERATIONAL RULES:
 4. FIX ALL ERRORS AT ONCE: When a build fails with multiple errors, read ALL affected files, analyze ALL errors together, then use batch_patch_file to apply ALL fixes in a single tool call. Do NOT fix errors one at a time in a loop.
 5. VERIFY AFTER CHANGES: After code modifications, run dotnet build via execute_terminal to verify.
 6. AUTO-CORRECT: If a build fails, inspect the full error output, diagnose every issue, and fix all of them in one batch_patch_file call before rebuilding.
+7. UNIQUE SNIPPETS: When using patch_file, always include enough surrounding context lines to make the target snippet unique within the file. Short snippets like '<Button Content=' will match multiple locations and fail.
 
 TOOL USAGE RULES:
 - You must only execute ONE tool call at a time. Never attempt to use multiple tools in a single response.
@@ -42,7 +42,26 @@ TOOL USAGE RULES:
 - When fixing build errors, prefer batch_patch_file over multiple individual patch_file calls.
 - The execute_terminal working directory defaults to the user's workspace. You do not need to specify it.
 """;
-        set => LocalSettings.Values["SystemPrompt"] = value;
+
+    public static string SystemPrompt
+    {
+        get
+        {
+            int storedVersion = LocalSettings.Values["SystemPromptVersion"] as int? ?? 0;
+            if (storedVersion < PromptVersion)
+            {
+                // New default prompt available — auto-upgrade
+                LocalSettings.Values["SystemPrompt"] = DefaultSystemPrompt;
+                LocalSettings.Values["SystemPromptVersion"] = PromptVersion;
+                return DefaultSystemPrompt;
+            }
+            return LocalSettings.Values["SystemPrompt"] as string ?? DefaultSystemPrompt;
+        }
+        set
+        {
+            LocalSettings.Values["SystemPrompt"] = value;
+            LocalSettings.Values["SystemPromptVersion"] = PromptVersion;
+        }
     }
 
     public static string SecureApiKey

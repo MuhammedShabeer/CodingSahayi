@@ -51,17 +51,23 @@ public class NativeTools
             string content = File.ReadAllText(filePath);
             string normalizedContent = content.Replace("\r\n", "\n");
             string normalizedTarget = targetSnippet.Replace("\r\n", "\n");
+            string normalizedReplacement = replacementSnippet.Replace("\r\n", "\n");
             
             int firstIndex = normalizedContent.IndexOf(normalizedTarget);
-            if (firstIndex == -1) return "Error: Target snippet not found in file. Please provide more context lines.";
+            if (firstIndex == -1) return "Error: Target snippet not found in file. Please read the file first and provide the exact text to match.";
             
             int lastIndex = normalizedContent.LastIndexOf(normalizedTarget);
-            if (firstIndex != lastIndex) return "Error: Target snippet appears multiple times in file. Please provide more context lines to make it unique.";
+            bool hadMultiple = (firstIndex != lastIndex);
             
-            string newContent = normalizedContent.Replace(normalizedTarget, replacementSnippet.Replace("\r\n", "\n"));
+            // Replace only the first occurrence
+            string newContent = normalizedContent.Substring(0, firstIndex) 
+                + normalizedReplacement 
+                + normalizedContent.Substring(firstIndex + normalizedTarget.Length);
             File.WriteAllText(filePath, newContent);
             
-            return $"Success: Replaced snippet in {filePath}";
+            string msg = $"Success: Replaced snippet in {filePath}";
+            if (hadMultiple) msg += " (Warning: snippet appeared multiple times, only replaced the FIRST occurrence. Use more context lines for precision.)";
+            return msg;
         }
         catch (Exception ex)
         {
@@ -159,7 +165,7 @@ public class NativeTools
         }
     }
 
-    public static string ExecuteTerminalSafe(string command, string workingDirectory = "", int timeoutSeconds = 45)
+    public static string ExecuteTerminalSafe(string command, string workingDirectory = "", int timeoutSeconds = 45, CancellationToken cancellationToken = default)
     {
         try
         {
