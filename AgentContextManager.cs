@@ -57,6 +57,11 @@ public class AgentContextManager
             "Executes a command. You do not need to provide a working directory; it will automatically default to the user's selected workspace root.",
             BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"workingDirectory\":{\"type\":\"string\"},\"timeoutSeconds\":{\"type\":\"integer\"}},\"required\":[\"command\"]}")
         ));
+        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
+            "batch_patch_file",
+            "Applies multiple patches to one or more files in a single call. Use this to fix ALL errors at once instead of patching one at a time. Each patch object has filePath, targetSnippet, and replacementSnippet.",
+            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"patches\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"targetSnippet\":{\"type\":\"string\"},\"replacementSnippet\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"targetSnippet\",\"replacementSnippet\"]}}},\"required\":[\"patches\"]}")
+        ));
 
         InitializeClient();
         _apiHistory.Add(new SystemChatMessage(SettingsManager.SystemPrompt));
@@ -237,8 +242,30 @@ public class AgentContextManager
                     if (toolResult.StartsWith("Failed") || toolResult.Contains("TIMED OUT")) success = false;
                     break;
                 default:
-                    toolResult = $"Unknown tool: {toolName}";
-                    success = false;
+                    if (toolName == "batch_patch_file")
+                    {
+                        var sb = new System.Text.StringBuilder();
+                        int successCount = 0, failCount = 0;
+                        if (args.TryGetProperty("patches", out var patches) && patches.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var patch in patches.EnumerateArray())
+                            {
+                                string pFile = ResolvePath(patch.GetProperty("filePath").GetString() ?? "");
+                                string pTarget = patch.GetProperty("targetSnippet").GetString() ?? "";
+                                string pReplace = patch.GetProperty("replacementSnippet").GetString() ?? "";
+                                string pResult = NativeTools.PatchFile(pFile, pTarget, pReplace);
+                                sb.AppendLine($"[{System.IO.Path.GetFileName(pFile)}]: {pResult}");
+                                if (pResult.StartsWith("Error")) failCount++; else successCount++;
+                            }
+                        }
+                        toolResult = $"Batch complete: {successCount} succeeded, {failCount} failed.\n{sb}";
+                        if (failCount > 0) success = false;
+                    }
+                    else
+                    {
+                        toolResult = $"Unknown tool: {toolName}";
+                        success = false;
+                    }
                     break;
             }
         }
