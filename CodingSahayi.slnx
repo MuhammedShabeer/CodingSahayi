@@ -14,5 +14,7 @@
     <Configuration Solution="Release|x86" Project="Release|x86" />
     <Configuration Solution="Debug|ARM64" Project="Debug|ARM64" />
     <Configuration Solution="Release|ARM64" Project="Release|ARM64" />
+    <Platform Solution="Debug|*" Project="x64" />
+    <Deploy Solution="Debug|*" />
   </Project>
 </Solution>
