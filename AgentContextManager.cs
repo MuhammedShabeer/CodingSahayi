@@ -54,7 +54,7 @@ public class AgentContextManager
         ));
         _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
             "execute_terminal",
-            "Executes a powershell command.",
+            "Executes a command. You do not need to provide a working directory; it will automatically default to the user's selected workspace root.",
             BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"workingDirectory\":{\"type\":\"string\"},\"timeoutSeconds\":{\"type\":\"integer\"}},\"required\":[\"command\"]}")
         ));
 

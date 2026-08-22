@@ -81,9 +81,12 @@
             <Button Content="Select Workspace" Click="SelectWorkspaceButton_Click" Background="#333333" Foreground="White" BorderThickness="0" CornerRadius="4" Padding="12,6"/>
             <TextBlock x:Name="WorkspacePathText" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="Gray" FontFamily="Consolas" />
             
-            <Button Grid.Column="2" Click="SettingsButton_Click" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Settings">
-                <SymbolIcon Symbol="Setting" />
-            </Button>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                <Button Content="Clear Chat" Click="ClearChat_Click" Background="#333333" Foreground="White" BorderThickness="0" CornerRadius="4" Padding="12,6"/>
+                <Button Click="SettingsButton_Click" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Settings">
+                    <SymbolIcon Symbol="Setting" />
+                </Button>
+            </StackPanel>
         </Grid>
 
         <ListView x:Name="ChatListView" Grid.Row="2" ItemsSource="{x:Bind ChatHistory}" ItemTemplateSelector="{StaticResource MessageSelector}" SelectionMode="None">
