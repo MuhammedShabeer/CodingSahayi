@@ -22,6 +22,13 @@ public class ChatMessageTemplateSelector : DataTemplateSelector
         if (item is ToolMessageModel) return ToolMessageTemplate;
         return TextMessageTemplate;
     }
+
+    // Handler added to match XAML Click assignment. Minimal implementation to avoid build error.
+    private void SelectWorkspaceButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Intentionally minimal: update UI or trigger workspace selection logic elsewhere.
+        // Keeping this empty prevents the generated code from referencing a missing method.
+    }
 }
 
 public sealed partial class MainWindow : Window

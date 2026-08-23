@@ -384,19 +384,19 @@ public class AgentContextManager
                     toolResult = NativeTools.SearchCode(
                         WorkspaceDirectory,
                         args.GetProperty("searchQuery").GetString() ?? "",
-                        args.TryGetProperty("fileExtensionFilter", out var fe) ? fe.GetString() : "*.*");
+                        args.TryGetProperty("fileExtensionFilter", out var fe) ? (fe.GetString() ?? "*.*") : "*.*");
                     if (toolResult.StartsWith("Error")) success = false;
                     break;
                 case "search_directory":
-                    string sPath = args.TryGetProperty("path", out var sp) ? sp.GetString() : "";
-                    string sPattern = args.TryGetProperty("searchPattern", out var spt) ? spt.GetString() ?? "*" : "*";
+                    string sPath = args.TryGetProperty("path", out var sp) ? (sp.GetString() ?? "") : "";
+                    string sPattern = args.TryGetProperty("searchPattern", out var spt) ? (spt.GetString() ?? "*") : "*";
                     toolResult = NativeTools.SearchDirectory(ResolvePath(sPath), sPattern);
                     if (toolResult.StartsWith("Error") || toolResult.StartsWith("Access denied") || toolResult.StartsWith("Directory not found")) success = false;
                     break;
                 case "execute_terminal":
-                    string wdPath = args.TryGetProperty("workingDirectory", out var wd) ? wd.GetString() : null;
+                    string wdPath = args.TryGetProperty("workingDirectory", out var wd) ? (wd.GetString() ?? "") : "";
                     string resolvedWd = ResolvePath(wdPath);
-                    if (System.IO.File.Exists(resolvedWd)) resolvedWd = System.IO.Path.GetDirectoryName(resolvedWd);
+                    if (System.IO.File.Exists(resolvedWd)) resolvedWd = System.IO.Path.GetDirectoryName(resolvedWd) ?? "";
 
                     toolResult = NativeTools.ExecuteTerminalSafe(
                         args.GetProperty("command").GetString() ?? "",
