@@ -10,7 +10,11 @@ public sealed partial class SettingsDialog : ContentDialog
         
         ApiKeyBox.Password = SettingsManager.SecureApiKey;
         EndpointBox.Text = SettingsManager.ApiEndpoint;
+        
+        // Populate model ComboBox with saved models, select the active one
+        ModelNameBox.ItemsSource = SettingsManager.AvailableModels;
         ModelNameBox.Text = SettingsManager.ModelName;
+        
         SystemPromptBox.Text = SettingsManager.SystemPrompt;
     }
 
@@ -18,7 +22,14 @@ public sealed partial class SettingsDialog : ContentDialog
     {
         SettingsManager.SecureApiKey = ApiKeyBox.Password;
         SettingsManager.ApiEndpoint = EndpointBox.Text;
-        SettingsManager.ModelName = ModelNameBox.Text;
+        
+        string selectedModel = ModelNameBox.Text?.Trim() ?? "";
+        if (!string.IsNullOrEmpty(selectedModel))
+        {
+            SettingsManager.ModelName = selectedModel;
+            SettingsManager.EnsureModelInList(selectedModel);
+        }
+        
         SettingsManager.SystemPrompt = SystemPromptBox.Text;
     }
 }

@@ -118,7 +118,24 @@ public class AgentContextManager
             
             try
             {
-                ChatCompletion completion = await _chatClient.CompleteChatAsync(_apiHistory, _chatOptions, cancellationToken);
+                // Retry loop with exponential backoff for rate-limit errors (429/529)
+                ChatCompletion completion = null!;
+                int maxRetries = 3;
+                for (int retry = 0; retry <= maxRetries; retry++)
+                {
+                    try
+                    {
+                        onStatusUpdate(retry > 0 ? $"Retrying API call (attempt {retry + 1}/{maxRetries + 1})..." : $"Calling API... (Iteration {iterationCount}/{maxIterations})");
+                        completion = await _chatClient.CompleteChatAsync(_apiHistory, _chatOptions, cancellationToken);
+                        break; // Success — exit retry loop
+                    }
+                    catch (Exception retryEx) when (retry < maxRetries && IsRateLimitError(retryEx))
+                    {
+                        int delaySeconds = (int)Math.Pow(2, retry + 1); // 2s, 4s, 8s
+                        onStatusUpdate($"Rate limited. Retrying in {delaySeconds}s... (attempt {retry + 1}/{maxRetries})");
+                        await Task.Delay(delaySeconds * 1000, cancellationToken);
+                    }
+                }
 
                 if (completion.FinishReason == ChatFinishReason.ToolCalls)
                 {
@@ -292,6 +309,16 @@ public class AgentContextManager
                 _apiHistory.RemoveAt(1);
             }
         }
+    }
+
+    private static bool IsRateLimitError(Exception ex)
+    {
+        var message = ex.Message ?? "";
+        // Check for HTTP status codes 429 (Too Many Requests) or 529 (Overloaded)
+        return message.Contains("429") || message.Contains("529") 
+            || message.Contains("Too Many Requests", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("overloaded", StringComparison.OrdinalIgnoreCase);
     }
 
     private string ResolvePath(string path)

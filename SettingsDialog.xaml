@@ -19,8 +19,8 @@
                 <TextBox x:Name="EndpointBox" Width="250" />
             </toolkit:SettingsCard>
             
-            <toolkit:SettingsCard Header="Model Name" Description="The LLM to use for vibe coding">
-                <TextBox x:Name="ModelNameBox" Width="250" />
+            <toolkit:SettingsCard Header="Model Name" Description="Select or type a model name">
+                <ComboBox x:Name="ModelNameBox" Width="250" IsEditable="True" />
             </toolkit:SettingsCard>
             
             <toolkit:SettingsExpander Header="System Prompt" Description="Agent rules and operating context" IsExpanded="True">

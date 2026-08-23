@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using Windows.Security.Credentials;
 using Windows.Storage;
 
@@ -22,6 +25,35 @@ public static class SettingsManager
     {
         get => LocalSettings.Values["ModelName"] as string ?? "meta/llama-3.1-70b-instruct";
         set => LocalSettings.Values["ModelName"] = value;
+    }
+
+    private static readonly List<string> DefaultModels = new()
+    {
+        "deepseek-ai/deepseek-v4-flash-0731",
+        "meta/llama-3.1-70b-instruct",
+        "anthropic/claude-3.5-sonnet-20240620"
+    };
+
+    public static List<string> AvailableModels
+    {
+        get
+        {
+            var json = LocalSettings.Values["AvailableModels"] as string;
+            if (string.IsNullOrEmpty(json)) return new List<string>(DefaultModels);
+            try { return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>(DefaultModels); }
+            catch { return new List<string>(DefaultModels); }
+        }
+        set => LocalSettings.Values["AvailableModels"] = JsonSerializer.Serialize(value);
+    }
+
+    public static void EnsureModelInList(string modelName)
+    {
+        var models = AvailableModels;
+        if (!models.Contains(modelName, StringComparer.OrdinalIgnoreCase))
+        {
+            models.Add(modelName);
+            AvailableModels = models;
+        }
     }
 
     private const string DefaultSystemPrompt = """
