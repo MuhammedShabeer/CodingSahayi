@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage.Pickers;
+using Microsoft.EntityFrameworkCore;
 
 namespace CodingSahayi;
 
@@ -94,10 +95,76 @@ public sealed partial class MainWindow : Window
             db.SaveChanges();
         }
         
-        ProjectsList.Clear();
-        foreach (var proj in db.Projects.ToList())
+        ProjectNav.MenuItems.Clear();
+        var projects = db.Projects.Include(p => p.Conversations).ToList();
+        
+        foreach (var proj in projects)
         {
-            ProjectsList.Add(proj);
+            var parentItem = new NavigationViewItem 
+            { 
+                Content = proj.Name, 
+                Icon = new FontIcon { Glyph = "\uED43" },
+                Tag = proj 
+            };
+            
+            if (proj.Conversations != null)
+            {
+                foreach (var conv in proj.Conversations)
+                {
+                    var childItem = new NavigationViewItem
+                    {
+                        Content = conv.Title,
+                        Icon = new SymbolIcon { Symbol = Symbol.Message },
+                        Tag = conv.Id
+                    };
+                    parentItem.MenuItems.Add(childItem);
+                }
+            }
+            ProjectNav.MenuItems.Add(parentItem);
+        }
+    }
+
+    private void NewChat_Click(object sender, RoutedEventArgs e)
+    {
+        CodingSahayi.Data.Project? activeProject = null;
+        
+        if (ProjectNav.SelectedItem is NavigationViewItem navItem)
+        {
+            if (navItem.Tag is CodingSahayi.Data.Project p) 
+                activeProject = p;
+            else if (navItem.Tag is int convId)
+            {
+                // Find parent project if a conversation is selected
+                using var db = new CodingSahayi.Data.AppDbContext();
+                var conv = db.Conversations.FirstOrDefault(c => c.Id == convId);
+                if (conv != null)
+                {
+                    activeProject = db.Projects.FirstOrDefault(p => p.Id == conv.ProjectId);
+                }
+            }
+        }
+        
+        if (activeProject == null)
+        {
+            // Default to first project if nothing selected
+            var firstItem = ProjectNav.MenuItems.FirstOrDefault() as NavigationViewItem;
+            if (firstItem?.Tag is CodingSahayi.Data.Project p) activeProject = p;
+        }
+
+        if (activeProject != null)
+        {
+            using var db = new CodingSahayi.Data.AppDbContext();
+            var newConv = new CodingSahayi.Data.Conversation
+            {
+                Title = "New Conversation",
+                UpdatedAt = DateTime.Now,
+                ProjectId = activeProject.Id
+            };
+            db.Conversations.Add(newConv);
+            db.SaveChanges();
+            
+            LoadProjects();
+            ClearChat_Click(this, new RoutedEventArgs());
         }
     }
 
@@ -432,6 +499,73 @@ public sealed partial class MainWindow : Window
         if (ChatHistory.Count > 0)
         {
             ChatListView.ScrollIntoView(ChatHistory.Last());
+        }
+    }
+
+    private async void NewProject_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+    {
+        var nameTextBox = new TextBox { Header = "Project Name", PlaceholderText = "e.g. My Awesome App" };
+        var folderTextBlock = new TextBlock { Text = "No folder selected", Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray), TextWrapping = TextWrapping.Wrap };
+        var selectFolderBtn = new Button { Content = "Select Workspace Folder", Margin = new Thickness(0, 10, 0, 10) };
+        string selectedPath = "";
+
+        selectFolderBtn.Click += async (s, ev) =>
+        {
+            var folderPicker = new FolderPicker();
+            folderPicker.SuggestedStartLocation = PickerLocationId.Desktop;
+            folderPicker.FileTypeFilter.Add("*");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hwnd);
+
+            var folder = await folderPicker.PickSingleFolderAsync();
+            if (folder != null)
+            {
+                selectedPath = folder.Path;
+                folderTextBlock.Text = folder.Path;
+                folderTextBlock.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+            }
+        };
+
+        var stackPanel = new StackPanel { Spacing = 10 };
+        stackPanel.Children.Add(nameTextBox);
+        stackPanel.Children.Add(selectFolderBtn);
+        stackPanel.Children.Add(folderTextBlock);
+
+        var dialog = new ContentDialog
+        {
+            Title = "Create New Project",
+            Content = stackPanel,
+            PrimaryButtonText = "Create",
+            CloseButtonText = "Cancel",
+            XamlRoot = this.Content.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+
+        if (result == ContentDialogResult.Primary)
+        {
+            if (string.IsNullOrWhiteSpace(nameTextBox.Text) || string.IsNullOrEmpty(selectedPath))
+            {
+                StatusText.Text = "Project creation cancelled: missing name or folder.";
+                return;
+            }
+
+            var newProject = new CodingSahayi.Data.Project
+            {
+                Name = nameTextBox.Text.Trim(),
+                WorkspacePath = selectedPath,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            using var db = new CodingSahayi.Data.AppDbContext();
+            db.Projects.Add(newProject);
+            await db.SaveChangesAsync();
+
+            LoadProjects();
+            _agentManager.WorkspaceDirectory = selectedPath;
+            WorkspacePathText.Text = selectedPath;
+            StatusText.Text = $"Project '{newProject.Name}' created.";
         }
     }
 }

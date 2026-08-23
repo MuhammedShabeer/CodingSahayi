@@ -8,6 +8,8 @@ namespace CodingSahayi.Data
         public string Name { get; set; } = string.Empty;
         public string WorkspacePath { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        
+        public System.Collections.Generic.ICollection<Conversation> Conversations { get; set; } = new System.Collections.Generic.List<Conversation>();
     }
 
     public class Conversation

@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:CodingSahayi"
+    xmlns:data="using:CodingSahayi.Data"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:controls="using:CommunityToolkit.WinUI.UI.Controls"
     Title="CodingSahayi"
@@ -68,9 +69,13 @@
         </Grid.Resources>
 
         <NavigationView x:Name="ProjectNav" IsPaneOpen="True" PaneDisplayMode="Left">
-            <NavigationView.MenuItems>
-                <NavigationViewItem Content="Default Project" Icon="Folder" />
-            </NavigationView.MenuItems>
+            <NavigationView.PaneFooter>
+                <NavigationViewItem Content="New Project" Tapped="NewProject_Tapped">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Add" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.PaneFooter>
             <NavigationView.Content>
                 <Grid>
                     <Grid.RowDefinitions>
@@ -98,6 +103,12 @@
             
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                 <Button Content="Clear Chat" Click="ClearChat_Click" Background="#333333" Foreground="White" BorderThickness="0" CornerRadius="4" Padding="12,6"/>
+                <Button Click="NewChat_Click" Background="#333333" Foreground="White" BorderThickness="0" CornerRadius="4" Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <SymbolIcon Symbol="Add" />
+                        <TextBlock Text="New Chat" />
+                    </StackPanel>
+                </Button>
                 <TextBlock Text="{x:Bind AppVersion}" VerticalAlignment="Center" Foreground="Gray" FontSize="12" Margin="0,0,4,0"/><TextBlock x:Name="ExecutionTimerText" VerticalAlignment="Center" Margin="15,0" Foreground="LightGray" Text="" />
                 <Button Click="SettingsButton_Click" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Settings">
                     <SymbolIcon Symbol="Setting" />
