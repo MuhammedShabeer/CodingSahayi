@@ -27,6 +27,41 @@ public static class SettingsManager
         set => LocalSettings.Values["ModelName"] = value;
     }
 
+    public static string LocalApiBaseUrl
+    {
+        get => LocalSettings.Values["LocalApiBaseUrl"] as string ?? "http://localhost:11434/v1";
+        set => LocalSettings.Values["LocalApiBaseUrl"] = value;
+    }
+
+    public static string LocalApiKey
+    {
+        get
+        {
+            var vault = new PasswordVault();
+            try
+            {
+                var credential = vault.Retrieve(ResourceName, "LocalApiKey");
+                credential.RetrievePassword();
+                return credential.Password;
+            }
+            catch (Exception)
+            {
+                return "lm-studio";
+            }
+        }
+        set
+        {
+            var vault = new PasswordVault();
+            vault.Add(new PasswordCredential(ResourceName, "LocalApiKey", value));
+        }
+    }
+
+    public static string LocalModelName
+    {
+        get => LocalSettings.Values["LocalModelName"] as string ?? "local-model";
+        set => LocalSettings.Values["LocalModelName"] = value;
+    }
+
     private static readonly List<string> DefaultModels = new()
     {
         "deepseek-ai/deepseek-v4-flash-0731",

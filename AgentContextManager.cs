@@ -10,7 +10,8 @@ namespace CodingSahayi;
 
 public class AgentContextManager
 {
-    private ChatClient _chatClient;
+    private ChatClient _cloudApiClient = null!;
+    private ChatClient _localApiClient = null!;
     private readonly ChatCompletionOptions _chatOptions;
     private readonly List<ChatMessage> _apiHistory = new();
     
@@ -85,6 +86,25 @@ public class AgentContextManager
         }
     }
 
+    public void LoadHistory(IEnumerable<CodingSahayi.Data.ChatMessageEntity> dbMessages)
+    {
+        InitializeClient();
+        _apiHistory.Clear();
+        _apiHistory.Add(new SystemChatMessage(SettingsManager.SystemPrompt));
+        
+        foreach (var msg in dbMessages.OrderBy(m => m.Timestamp))
+        {
+            if (msg.Role == "User")
+            {
+                _apiHistory.Add(new UserChatMessage(msg.Content));
+            }
+            else if (msg.Role == "Agent" || msg.Role == "Assistant")
+            {
+                _apiHistory.Add(new AssistantChatMessage(msg.Content));
+            }
+        }
+    }
+
     private void InitializeClient()
     {
         var apiKey = SettingsManager.SecureApiKey;
@@ -92,7 +112,79 @@ public class AgentContextManager
         var model = SettingsManager.ModelName;
         
         var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(endpoint) });
-        _chatClient = client.GetChatClient(model);
+        _cloudApiClient = client.GetChatClient(model);
+        
+        var localApiKey = SettingsManager.LocalApiKey;
+        var localEndpoint = SettingsManager.LocalApiBaseUrl;
+        var localModel = SettingsManager.LocalModelName;
+        
+        var localClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(localApiKey), new OpenAIClientOptions { Endpoint = new Uri(localEndpoint) });
+        _localApiClient = localClient.GetChatClient(localModel);
+    }
+
+    public async Task<bool> IsLocalAvailableAsync()
+    {
+        try
+        {
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var pingHistory = new List<ChatMessage> { new UserChatMessage("hi") };
+            await _localApiClient.CompleteChatAsync(pingHistory, cancellationToken: cts.Token);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<(string route, string plan)> PlanAndRouteTask(string userPrompt, System.Threading.CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var routerCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            routerCts.CancelAfter(TimeSpan.FromSeconds(15));
+            
+            var routerSystem = new SystemChatMessage(
+                "You are a task complexity classifier. Analyze the user's task and respond with ONLY a JSON object.\n" +
+                "Evaluate based on: Does it need multi-file edits? Does it need architectural reasoning? Does it need tool calls (reading/writing files, running commands)?\n" +
+                "Simple tasks: greetings, Q&A, explanations, single-concept questions, formatting.\n" +
+                "Complex tasks: code generation, debugging, refactoring, multi-step builds, file operations.\n" +
+                "Output format: {\"Plan\": \"brief 1-sentence plan\", \"ComplexityScore\": <1-10>}");
+            var routerUser = new UserChatMessage(userPrompt);
+            var routerHistory = new List<ChatMessage> { routerSystem, routerUser };
+            
+            var routerOptions = new ChatCompletionOptions
+            {
+                ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+            };
+            
+            var completion = await _localApiClient.CompleteChatAsync(routerHistory, routerOptions, routerCts.Token);
+            var responseText = completion.Value.Content[0].Text;
+            
+            using var doc = JsonDocument.Parse(responseText);
+            var root = doc.RootElement;
+            
+            string plan = "";
+            if (root.TryGetProperty("Plan", out var planProp) || root.TryGetProperty("plan", out planProp))
+                plan = planProp.GetString() ?? "";
+            
+            int score = 5; // default to cloud
+            JsonElement scoreProp;
+            if (root.TryGetProperty("ComplexityScore", out scoreProp) || root.TryGetProperty("complexity_score", out scoreProp))
+            {
+                if (scoreProp.ValueKind == JsonValueKind.Number)
+                    score = scoreProp.GetInt32();
+                else if (scoreProp.ValueKind == JsonValueKind.String && int.TryParse(scoreProp.GetString(), out int parsed))
+                    score = parsed;
+            }
+            
+            string route = score >= 5 ? "API" : "LOCAL";
+            return (route, plan);
+        }
+        catch
+        {
+            return ("API", "");
+        }
     }
 
     public async Task<string> ProcessMessageAsync(
@@ -106,6 +198,39 @@ public class AgentContextManager
         _apiHistory.Add(new UserChatMessage(userMessage));
         PruneContextIfNecessary();
 
+        // --- ROUTING PHASE ---
+        string routeDecision = "API";
+        ChatClient activeClient = _cloudApiClient;
+        
+        onStatusUpdate("Checking local model availability...");
+        bool localAvailable = await IsLocalAvailableAsync();
+        
+        if (localAvailable)
+        {
+            onStatusUpdate("Routing task...");
+            var (route, plan) = await PlanAndRouteTask(userMessage, cancellationToken);
+            routeDecision = route;
+            
+            if (routeDecision == "LOCAL")
+            {
+                activeClient = _localApiClient;
+                onStatusUpdate(!string.IsNullOrEmpty(plan) 
+                    ? $"Routing via LOCAL model — {plan}" 
+                    : "Routing via LOCAL model...");
+            }
+            else
+            {
+                onStatusUpdate(!string.IsNullOrEmpty(plan) 
+                    ? $"Routing via CLOUD API — {plan}" 
+                    : "Routing via CLOUD API...");
+            }
+        }
+        else
+        {
+            onStatusUpdate("Local model offline, using CLOUD API...");
+        }
+
+        // --- AGENTIC LOOP ---
         int iterationCount = 0;
         bool requiresAction = true;
         string finalResponse = string.Empty;
@@ -130,8 +255,10 @@ public class AgentContextManager
                 {
                     try
                     {
-                        onStatusUpdate(retry > 0 ? $"Retrying API call (attempt {retry + 1}/{maxRetries + 1})..." : $"Calling API... (Iteration {iterationCount}/{maxIterations})");
-                        completion = await _chatClient.CompleteChatAsync(_apiHistory, _chatOptions, cancellationToken);
+                        onStatusUpdate(retry > 0 
+                            ? $"Retrying API call (attempt {retry + 1}/{maxRetries + 1})..." 
+                            : $"Calling {(activeClient == _localApiClient ? "LOCAL" : "CLOUD")} model... (Iteration {iterationCount}/{maxIterations})");
+                        completion = await activeClient.CompleteChatAsync(_apiHistory, _chatOptions, cancellationToken);
                         break; // Success — exit retry loop
                     }
                     catch (Exception retryEx) when (retry < maxRetries && IsRateLimitError(retryEx))
@@ -139,6 +266,13 @@ public class AgentContextManager
                         int delaySeconds = (int)Math.Pow(2, retry + 1); // 2s, 4s, 8s
                         onStatusUpdate($"Rate limited. Retrying in {delaySeconds}s... (attempt {retry + 1}/{maxRetries})");
                         await Task.Delay(delaySeconds * 1000, cancellationToken);
+                    }
+                    catch (Exception) when (activeClient == _localApiClient && retry == 0)
+                    {
+                        // Local model failed mid-conversation — fall back to cloud
+                        onStatusUpdate("Local model error, falling back to CLOUD API...");
+                        activeClient = _cloudApiClient;
+                        // retry immediately with cloud
                     }
                 }
 

@@ -32,4 +32,13 @@ namespace CodingSahayi.Data
         
         public Conversation Conversation { get; set; } = null!;
     }
+
+    public class ProjectKnowledge
+    {
+        public int Id { get; set; }
+        public int ProjectId { get; set; }
+        public string TaskDescription { get; set; } = string.Empty;
+        public string LearnedImplementation { get; set; } = string.Empty;
+        public DateTime DateLearned { get; set; }
+    }
 }

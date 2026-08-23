@@ -40,6 +40,8 @@ public sealed partial class MainWindow : Window
     private bool _isMentioning = false;
     private int _mentionStartIndex = -1;
     private CancellationTokenSource? _searchCts;
+    
+    private int? _activeConversationId = null;
 
     private async void CopyMessage_Click(object sender, RoutedEventArgs e)
     {
@@ -77,6 +79,20 @@ public sealed partial class MainWindow : Window
 
         using var db = new CodingSahayi.Data.AppDbContext();
         db.Database.EnsureCreated();
+        
+        try 
+        {
+            db.Database.ExecuteSqlRaw(@"
+                CREATE TABLE IF NOT EXISTS ""ProjectKnowledgeBase"" (
+                    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ProjectKnowledgeBase"" PRIMARY KEY AUTOINCREMENT,
+                    ""ProjectId"" INTEGER NOT NULL,
+                    ""TaskDescription"" TEXT NOT NULL,
+                    ""LearnedImplementation"" TEXT NOT NULL,
+                    ""DateLearned"" TEXT NOT NULL
+                );
+            ");
+        } 
+        catch { }
         
         LoadProjects();
     }
@@ -122,6 +138,78 @@ public sealed partial class MainWindow : Window
             }
             ProjectNav.MenuItems.Add(parentItem);
         }
+
+        if (ProjectNav.SelectedItem == null && ProjectNav.MenuItems.Count > 0)
+        {
+            ProjectNav.SelectedItem = ProjectNav.MenuItems[0];
+        }
+    }
+
+    private void ProjectNav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    {
+        if (args.SelectedItem is NavigationViewItem navItem)
+        {
+            CodingSahayi.Data.Project? activeProject = null;
+            _activeConversationId = null;
+            
+            if (navItem.Tag is CodingSahayi.Data.Project p)
+            {
+                activeProject = p;
+                
+                // Try to select the first conversation if we just clicked a project
+                var firstConv = p.Conversations?.FirstOrDefault();
+                if (firstConv != null)
+                {
+                    _activeConversationId = firstConv.Id;
+                }
+            }
+            else if (navItem.Tag is int convId)
+            {
+                _activeConversationId = convId;
+                using var db = new CodingSahayi.Data.AppDbContext();
+                var conv = db.Conversations.FirstOrDefault(c => c.Id == convId);
+                if (conv != null)
+                {
+                    activeProject = db.Projects.FirstOrDefault(pr => pr.Id == conv.ProjectId);
+                }
+            }
+
+            if (activeProject != null)
+            {
+                _agentManager.WorkspaceDirectory = activeProject.WorkspacePath;
+                WorkspacePathText.Text = activeProject.WorkspacePath;
+            }
+            
+            LoadConversationHistory();
+        }
+    }
+
+    private void LoadConversationHistory()
+    {
+        ChatHistory.Clear();
+        if (_activeConversationId == null) 
+        {
+            _agentManager.ReinitializeClient();
+            ChatHistory.Add(new TextMessageModel { Role = "Agent", Content = "Hello! I am an AI coding assistant. Select or create a conversation to begin.", Alignment = HorizontalAlignment.Left, BackgroundBrush = AgentBrush }); 
+            return;
+        }
+
+        using var db = new CodingSahayi.Data.AppDbContext();
+        var messages = db.ChatMessages
+            .Where(m => m.ConversationId == _activeConversationId.Value)
+            .OrderBy(m => m.Timestamp)
+            .ToList();
+
+        foreach (var msg in messages)
+        {
+            if (msg.Role == "User")
+                ChatHistory.Add(new TextMessageModel { Role = "User", Content = msg.Content, Alignment = HorizontalAlignment.Right, BackgroundBrush = UserBrush });
+            else
+                ChatHistory.Add(new TextMessageModel { Role = "Agent", Content = msg.Content, Alignment = HorizontalAlignment.Left, BackgroundBrush = AgentBrush });
+        }
+        
+        _agentManager.LoadHistory(messages);
+        ScrollToBottom();
     }
 
     private void NewChat_Click(object sender, RoutedEventArgs e)
@@ -174,23 +262,6 @@ public sealed partial class MainWindow : Window
         {
             SettingsManager.ModelName = selectedModel;
             _agentManager.ReinitializeClient();
-        }
-    }
-
-    private async void SelectWorkspaceButton_Click(object sender, RoutedEventArgs e)
-    {
-        var folderPicker = new FolderPicker();
-        folderPicker.SuggestedStartLocation = PickerLocationId.Desktop;
-        folderPicker.FileTypeFilter.Add("*");
-
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hwnd);
-
-        var folder = await folderPicker.PickSingleFolderAsync();
-        if (folder != null)
-        {
-            _agentManager.WorkspaceDirectory = folder.Path;
-            WorkspacePathText.Text = folder.Path;
         }
     }
 
@@ -353,11 +424,15 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private DateTime _lastSendTime = DateTime.MinValue;
+
     private async void SendButton_Click(object sender, RoutedEventArgs e)
     {
         // If a generation is in progress, Stop it instead of sending new text.
         if (_cts != null)
         {
+            if (DateTime.UtcNow - _lastSendTime < TimeSpan.FromMilliseconds(500)) return;
+
             _cts.Cancel();
             _cts.Dispose();
             _cts = null;
@@ -365,6 +440,8 @@ public sealed partial class MainWindow : Window
         }
 
         if (string.IsNullOrWhiteSpace(InputTextBox.Text) && AttachedFiles.Count == 0) return;
+
+        _lastSendTime = DateTime.UtcNow;
 
         string userText = InputTextBox.Text;
         
@@ -390,6 +467,23 @@ public sealed partial class MainWindow : Window
         }
 
         ChatHistory.Add(new TextMessageModel { Role = "User", Content = userText, Alignment = HorizontalAlignment.Right, BackgroundBrush = UserBrush });
+        
+        if (_activeConversationId.HasValue)
+        {
+            using var db = new CodingSahayi.Data.AppDbContext();
+            db.ChatMessages.Add(new CodingSahayi.Data.ChatMessageEntity
+            {
+                ConversationId = _activeConversationId.Value,
+                Role = "User",
+                Content = fullMessageToAI,
+                Timestamp = DateTime.UtcNow
+            });
+            
+            var conv = db.Conversations.Find(_activeConversationId.Value);
+            if (conv != null) conv.UpdatedAt = DateTime.UtcNow;
+            
+            db.SaveChanges();
+        }
         
         AttachedFiles.Clear();
 
@@ -461,6 +555,23 @@ public sealed partial class MainWindow : Window
             if (!string.IsNullOrWhiteSpace(finalResponse))
             {
                 ChatHistory.Add(new TextMessageModel { Role = "Agent", Content = finalResponse, Alignment = HorizontalAlignment.Left, BackgroundBrush = AgentBrush });
+                
+                if (_activeConversationId.HasValue)
+                {
+                    using var db = new CodingSahayi.Data.AppDbContext();
+                    db.ChatMessages.Add(new CodingSahayi.Data.ChatMessageEntity
+                    {
+                        ConversationId = _activeConversationId.Value,
+                        Role = "Agent",
+                        Content = finalResponse,
+                        Timestamp = DateTime.UtcNow
+                    });
+                    
+                    var conv = db.Conversations.Find(_activeConversationId.Value);
+                    if (conv != null) conv.UpdatedAt = DateTime.UtcNow;
+                    
+                    db.SaveChanges();
+                }
             }
 
             if (token.IsCancellationRequested)

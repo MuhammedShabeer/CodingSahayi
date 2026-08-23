@@ -9,6 +9,7 @@ namespace CodingSahayi.Data
         public DbSet<Project> Projects { get; set; } = null!;
         public DbSet<Conversation> Conversations { get; set; } = null!;
         public DbSet<ChatMessageEntity> ChatMessages { get; set; } = null!;
+        public DbSet<ProjectKnowledge> ProjectKnowledgeBase { get; set; } = null!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

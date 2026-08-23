@@ -19,6 +19,18 @@
                 <TextBox x:Name="EndpointBox" Width="250" />
             </toolkit:SettingsCard>
             
+            <toolkit:SettingsCard Header="Local API Key" Description="API key for your local model (e.g. lm-studio)">
+                <PasswordBox x:Name="LocalApiKeyBox" Width="250" />
+            </toolkit:SettingsCard>
+            
+            <toolkit:SettingsCard Header="Local API Base URL" Description="The local OpenAI-compatible endpoint (e.g. Ollama)">
+                <TextBox x:Name="LocalEndpointBox" Width="250" />
+            </toolkit:SettingsCard>
+            
+            <toolkit:SettingsCard Header="Local Model Name" Description="Model name loaded in LM Studio or Ollama">
+                <TextBox x:Name="LocalModelNameBox" Width="250" />
+            </toolkit:SettingsCard>
+            
             <toolkit:SettingsCard Header="Model Name" Description="Select or type a model name">
                 <ComboBox x:Name="ModelNameBox" Width="250" IsEditable="True" />
             </toolkit:SettingsCard>
