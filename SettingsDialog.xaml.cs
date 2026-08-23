@@ -13,7 +13,7 @@ public sealed partial class SettingsDialog : ContentDialog
         
         // Populate model ComboBox with saved models, select the active one
         ModelNameBox.ItemsSource = SettingsManager.AvailableModels;
-        ModelNameBox.Text = SettingsManager.ModelName;
+        ModelNameBox.SelectedItem = SettingsManager.ModelName;
         
         SystemPromptBox.Text = SettingsManager.SystemPrompt;
     }

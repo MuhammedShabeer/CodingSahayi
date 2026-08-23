@@ -11,7 +11,7 @@ public static class SettingsManager
 {
     private const string ResourceName = "VibeCoderAgent";
     private const string ApiKeyUserName = "ApiKey";
-    private const int PromptVersion = 3; // Bump this when the default prompt changes
+    private const int PromptVersion = 4; // Bump this when the default prompt changes
     
     private static readonly ApplicationDataContainer LocalSettings = ApplicationData.Current.LocalSettings;
 
@@ -23,7 +23,7 @@ public static class SettingsManager
 
     public static string ModelName
     {
-        get => LocalSettings.Values["ModelName"] as string ?? "meta/llama-3.1-70b-instruct";
+        get => LocalSettings.Values["ModelName"] as string ?? "anthropic/claude-3.5-sonnet-20240620";
         set => LocalSettings.Values["ModelName"] = value;
     }
 
@@ -72,6 +72,9 @@ TOOL USAGE RULES:
 - You must only execute ONE tool call at a time.
 - You must invoke tools using the native tool calling API. Do NOT output raw JSON tool calls in your chat text.
 - The execute_terminal working directory defaults to the user's workspace. You do not need to specify it.
+
+CRITICAL RULE: 
+Once you have successfully completed the user's objective and verified the build succeeds, you must immediately output a final text summary and you MUST NOT call any further tools.
 """;
 
     public static string SystemPrompt

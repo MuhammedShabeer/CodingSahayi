@@ -120,7 +120,7 @@ public sealed partial class MainWindow : Window
         _elapsedTimer.Start();
 
         // Change the button to act as a Stop control.
-        SendButton.Content = "Stop (00:00)";
+        SendButton.Content = "Stop (00:00)"; ExecutionTimerText.Text = "Time: 00:00";
 
         StatusText.Text = "Thinking...";
 
@@ -183,7 +183,7 @@ public sealed partial class MainWindow : Window
             }
             else
             {
-                StatusText.Text = "Idle";
+                ExecutionTimerText.Text = ""; StatusText.Text = "Idle";
             }
             ScrollToBottom();
 
