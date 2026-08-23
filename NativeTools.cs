@@ -191,9 +191,31 @@ public class NativeTools
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             
-            bool exited = process.WaitForExit(timeoutSeconds * 1000);
+            bool cancelled = false;
+            bool exited = false;
             
-            if (!exited)
+            // Loop waiting for exit, breaking early if the caller cancels.
+            while (!process.HasExited)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    cancelled = true;
+                    break;
+                }
+
+                if (process.WaitForExit(100))
+                {
+                    exited = true;
+                    break;
+                }
+            }
+
+            if (cancelled)
+            {
+                process.Kill(true); // Kill process tree
+                outputBuilder.AppendLine($"\n\n--- COMMAND CANCELLED ---");
+            }
+            else if (!exited)
             {
                 process.Kill(true); // Kill process tree
                 outputBuilder.AppendLine($"\n\n--- COMMAND TIMED OUT AFTER {timeoutSeconds} SECONDS ---");

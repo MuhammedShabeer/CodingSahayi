@@ -18,7 +18,11 @@
         <Grid.Resources>
             <DataTemplate x:Key="TextMessageTemplate" x:DataType="local:TextMessageModel">
                 <Grid HorizontalAlignment="{x:Bind Alignment}" Margin="0,5">
-                    <Border Background="{x:Bind BackgroundBrush}" CornerRadius="8" Padding="12" MaxWidth="800">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="{x:Bind BackgroundBrush}" CornerRadius="8" Padding="12" MaxWidth="800">
                         <controls:MarkdownTextBlock 
                             Text="{x:Bind Content, Mode=OneWay}" 
                             TextWrapping="Wrap" 
@@ -26,6 +30,11 @@
                             Background="Transparent"
                             CodeBackground="#202020"/>
                     </Border>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" 
+                                Visibility="{x:Bind local:MainWindow.ShowCopyButton(Role), Mode=OneWay}" Margin="0,2,4,0">
+                        <Button Content="Copy" Click="CopyMessage_Click" FontSize="11" Padding="8,3" Height="24" 
+                                Background="Transparent" BorderThickness="1" BorderBrush="#555555" CornerRadius="4" Foreground="LightGray"/>
+                    </StackPanel>
                 </Grid>
             </DataTemplate>
             
@@ -83,6 +92,7 @@
             
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                 <Button Content="Clear Chat" Click="ClearChat_Click" Background="#333333" Foreground="White" BorderThickness="0" CornerRadius="4" Padding="12,6"/>
+                <TextBlock Text="{x:Bind AppVersion}" VerticalAlignment="Center" Foreground="Gray" FontSize="12" Margin="0,0,4,0"/>
                 <Button Click="SettingsButton_Click" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Settings">
                     <SymbolIcon Symbol="Setting" />
                 </Button>

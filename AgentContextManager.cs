@@ -95,7 +95,8 @@ public class AgentContextManager
         Action<string> onStatusUpdate, 
         ToolStartHandler onToolStart,
         ToolEndHandler onToolEnd,
-        int maxIterations = 30)
+        int maxIterations = 30,
+        System.Threading.CancellationToken cancellationToken = default)
     {
         _apiHistory.Add(new UserChatMessage(userMessage));
         PruneContextIfNecessary();
@@ -117,7 +118,7 @@ public class AgentContextManager
             
             try
             {
-                ChatCompletion completion = await _chatClient.CompleteChatAsync(_apiHistory, _chatOptions);
+                ChatCompletion completion = await _chatClient.CompleteChatAsync(_apiHistory, _chatOptions, cancellationToken);
 
                 if (completion.FinishReason == ChatFinishReason.ToolCalls)
                 {
@@ -134,7 +135,7 @@ public class AgentContextManager
                             onToolStart?.Invoke(toolCall.Id, toolCall.FunctionName, argsStr);
 
                             var args = JsonSerializer.Deserialize<JsonElement>(argsStr);
-                            var execution = ExecuteTool(toolCall.FunctionName, args);
+                            var execution = ExecuteTool(toolCall.FunctionName, args, cancellationToken);
                             toolResult = execution.result;
                             success = execution.success;
                         }
@@ -169,7 +170,7 @@ public class AgentContextManager
                                 string toolId = "fallback_" + Guid.NewGuid().ToString().Substring(0, 8);
                                 
                                 onToolStart?.Invoke(toolId, toolName, argsStr);
-                                var execution = ExecuteTool(toolName, paramsProp);
+                                var execution = ExecuteTool(toolName, paramsProp, cancellationToken);
                                 onToolEnd?.Invoke(toolId, execution.result, execution.success);
                                 
                                 _apiHistory.Add(new UserChatMessage($"[Tool Execution Result]:\n{execution.result}"));
@@ -193,7 +194,7 @@ public class AgentContextManager
         return finalResponse;
     }
     
-    private (string result, bool success) ExecuteTool(string toolName, JsonElement args)
+    private (string result, bool success) ExecuteTool(string toolName, JsonElement args, System.Threading.CancellationToken cancellationToken = default)
     {
         string toolResult = string.Empty;
         bool success = true;
@@ -238,8 +239,9 @@ public class AgentContextManager
                     toolResult = NativeTools.ExecuteTerminalSafe(
                         args.GetProperty("command").GetString() ?? "",
                         resolvedWd,
-                        GetIntProperty(args, "timeoutSeconds", 45));
-                    if (toolResult.StartsWith("Failed") || toolResult.Contains("TIMED OUT")) success = false;
+                        GetIntProperty(args, "timeoutSeconds", 45),
+                        cancellationToken);
+                    if (toolResult.StartsWith("Failed") || toolResult.Contains("TIMED OUT") || toolResult.StartsWith("Cancelled")) success = false;
                     break;
                 default:
                     if (toolName == "batch_patch_file")

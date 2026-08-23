@@ -1,9 +1,11 @@
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using Windows.Storage.Pickers;
 
 namespace CodingSahayi;
@@ -24,6 +26,23 @@ public sealed partial class MainWindow : Window
 {
     public ObservableCollection<MessageModelBase> ChatHistory { get; } = new();
     private readonly AgentContextManager _agentManager = new();
+    public string AppVersion => $"v{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
+    public static Visibility ShowCopyButton(string role) => role == "Agent" ? Visibility.Visible : Visibility.Collapsed;
+
+    private CancellationTokenSource? _cts;
+    private System.Diagnostics.Stopwatch _elapsedStopwatch = new();
+    private DispatcherQueueTimer? _elapsedTimer;
+
+    private async void CopyMessage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is TextMessageModel message)
+        {
+            var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            dataPackage.SetText(message.Content);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+            StatusText.Text = "Copied to clipboard.";
+        }
+    }
 
     private SolidColorBrush UserBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 120, 215));
     private SolidColorBrush AgentBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 60, 60, 60));
@@ -70,17 +89,42 @@ public sealed partial class MainWindow : Window
 
     private async void SendButton_Click(object sender, RoutedEventArgs e)
     {
+        // If a generation is in progress, Stop it instead of sending new text.
+        if (_cts != null)
+        {
+            _cts.Cancel();
+            _cts.Dispose();
+            _cts = null;
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(InputTextBox.Text)) return;
 
         string userText = InputTextBox.Text;
         InputTextBox.Text = string.Empty;
         InputTextBox.IsEnabled = false;
-        SendButton.IsEnabled = false;
 
         ChatHistory.Add(new TextMessageModel { Role = "User", Content = userText, Alignment = HorizontalAlignment.Right, BackgroundBrush = UserBrush });
         
+        _cts = new CancellationTokenSource();
+
+        // Start the elapsed-time timer that renders "Elapsed: mm:ss".
+        _elapsedStopwatch.Restart();
+        _elapsedTimer = DispatcherQueue.CreateTimer();
+        _elapsedTimer.Interval = TimeSpan.FromSeconds(1);
+        _elapsedTimer.Tick += (s, ev) =>
+        {
+            TimeSpan ts = _elapsedStopwatch.Elapsed;
+            SendButton.Content = $"Stop ({ts.Minutes:D2}:{ts.Seconds:D2})";
+        };
+        _elapsedTimer.Start();
+
+        // Change the button to act as a Stop control.
+        SendButton.Content = "Stop (00:00)";
+
         StatusText.Text = "Thinking...";
 
+        var token = _cts.Token;
         string finalResponse = await _agentManager.ProcessMessageAsync(
             userText, 
             (status) =>
@@ -119,20 +163,34 @@ public sealed partial class MainWindow : Window
                         toolModel.Status = success ? "Success" : "Failed";
                     }
                 });
-            }
+            },
+            cancellationToken: token
         );
 
         DispatcherQueue.TryEnqueue(() =>
         {
+            _elapsedTimer?.Stop();
+            _elapsedStopwatch.Stop();
+
             if (!string.IsNullOrWhiteSpace(finalResponse))
             {
                 ChatHistory.Add(new TextMessageModel { Role = "Agent", Content = finalResponse, Alignment = HorizontalAlignment.Left, BackgroundBrush = AgentBrush });
             }
-            StatusText.Text = "Idle";
+
+            if (token.IsCancellationRequested)
+            {
+                StatusText.Text = "Interrupted.";
+            }
+            else
+            {
+                StatusText.Text = "Idle";
+            }
             ScrollToBottom();
 
             InputTextBox.IsEnabled = true;
-            SendButton.IsEnabled = true;
+            SendButton.Content = "Send";
+            _cts?.Dispose();
+            _cts = null;
         });
     }
 
