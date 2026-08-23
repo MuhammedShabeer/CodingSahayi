@@ -67,13 +67,19 @@
                 ToolMessageTemplate="{StaticResource ToolMessageTemplate}" />
         </Grid.Resources>
 
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        <NavigationView x:Name="ProjectNav" IsPaneOpen="True" PaneDisplayMode="Left">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Default Project" Icon="Folder" />
+            </NavigationView.MenuItems>
+            <NavigationView.Content>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
         <TitleBar x:Name="AppTitleBar" Title="CodingSahayi">
             <TitleBar.IconSource>
@@ -200,5 +206,8 @@
                 </Grid>
             </Grid>
         </Border>
+                </Grid>
+            </NavigationView.Content>
+        </NavigationView>
     </Grid>
 </Window>

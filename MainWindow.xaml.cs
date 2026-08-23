@@ -26,6 +26,7 @@ public class ChatMessageTemplateSelector : DataTemplateSelector
 public sealed partial class MainWindow : Window
 {
     public ObservableCollection<MessageModelBase> ChatHistory { get; } = new();
+    public ObservableCollection<CodingSahayi.Data.Project> ProjectsList { get; set; } = new();
     private readonly AgentContextManager _agentManager = new();
     public string AppVersion => $"v{System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
     public static Visibility ShowCopyButton(string role) => role == "Agent" ? Visibility.Visible : Visibility.Collapsed;
@@ -72,6 +73,32 @@ public sealed partial class MainWindow : Window
         {
             ContextChipsControl.Visibility = AttachedFiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         };
+
+        using var db = new CodingSahayi.Data.AppDbContext();
+        db.Database.EnsureCreated();
+        
+        LoadProjects();
+    }
+
+    private void LoadProjects()
+    {
+        using var db = new CodingSahayi.Data.AppDbContext();
+        if (!db.Projects.Any())
+        {
+            db.Projects.Add(new CodingSahayi.Data.Project 
+            { 
+                Name = "Default Project", 
+                WorkspacePath = _agentManager.WorkspaceDirectory ?? "", 
+                CreatedAt = DateTime.UtcNow 
+            });
+            db.SaveChanges();
+        }
+        
+        ProjectsList.Clear();
+        foreach (var proj in db.Projects.ToList())
+        {
+            ProjectsList.Add(proj);
+        }
     }
 
     private void ModelSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
