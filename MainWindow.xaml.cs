@@ -6,6 +6,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 
 namespace CodingSahayi;
@@ -32,6 +33,11 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _cts;
     private System.Diagnostics.Stopwatch _elapsedStopwatch = new();
     private DispatcherQueueTimer? _elapsedTimer;
+    
+    public ObservableCollection<string> AttachedFiles { get; } = new();
+    private bool _isMentioning = false;
+    private int _mentionStartIndex = -1;
+    private CancellationTokenSource? _searchCts;
 
     private async void CopyMessage_Click(object sender, RoutedEventArgs e)
     {
@@ -56,6 +62,25 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon("Assets/AppIcon.ico");
         
         WorkspacePathText.Text = _agentManager.WorkspaceDirectory;
+        
+        ModelSelector.ItemsSource = SettingsManager.AvailableModels;
+        ModelSelector.SelectedItem = SettingsManager.ModelName;
+        ModelSelector.SelectionChanged += ModelSelector_SelectionChanged;
+
+        ContextChipsControl.ItemsSource = AttachedFiles;
+        AttachedFiles.CollectionChanged += (s, e) => 
+        {
+            ContextChipsControl.Visibility = AttachedFiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        };
+    }
+
+    private void ModelSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ModelSelector.SelectedItem is string selectedModel && !string.IsNullOrEmpty(selectedModel))
+        {
+            SettingsManager.ModelName = selectedModel;
+            _agentManager.ReinitializeClient();
+        }
     }
 
     private async void SelectWorkspaceButton_Click(object sender, RoutedEventArgs e)
@@ -89,7 +114,38 @@ public sealed partial class MainWindow : Window
 
     private void InputTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(InputTextBox.Text))
+        if (_cts != null) return;
+
+        string text = InputTextBox.Text;
+        int caret = InputTextBox.SelectionStart;
+
+        // Mention Detection
+        if (!_isMentioning)
+        {
+            if (caret > 0 && text.Length >= caret)
+            {
+                if (text[caret - 1] == '@' && (caret == 1 || char.IsWhiteSpace(text[caret - 2])))
+                {
+                    _isMentioning = true;
+                    _mentionStartIndex = caret - 1;
+                    UpdateMentionSearch("");
+                }
+            }
+        }
+        else
+        {
+            if (caret <= _mentionStartIndex || (caret > 0 && char.IsWhiteSpace(text[caret - 1])))
+            {
+                CancelMentionMode();
+            }
+            else
+            {
+                string query = text.Substring(_mentionStartIndex + 1, caret - (_mentionStartIndex + 1));
+                UpdateMentionSearch(query);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
         {
             SendButton.Visibility = Visibility.Collapsed;
             MicButton.Visibility = Visibility.Visible;
@@ -98,6 +154,108 @@ public sealed partial class MainWindow : Window
         {
             SendButton.Visibility = Visibility.Visible;
             MicButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void CancelMentionMode()
+    {
+        _isMentioning = false;
+        _mentionStartIndex = -1;
+        MentionPopupBorder.Visibility = Visibility.Collapsed;
+        _searchCts?.Cancel();
+    }
+
+    private async void UpdateMentionSearch(string query)
+    {
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+
+        try
+        {
+            await Task.Delay(150, token); // Debounce
+            
+            var files = await Task.Run(() => 
+            {
+                var dir = _agentManager.WorkspaceDirectory;
+                if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) return new string[0];
+                
+                try {
+                    return System.IO.Directory.EnumerateFiles(dir, $"*{query}*", System.IO.SearchOption.AllDirectories)
+                        .Where(f => !f.Contains("\\bin\\") && !f.Contains("\\obj\\") && !f.Contains("\\.git\\"))
+                        .Take(20)
+                        .Select(f => f.Substring(dir.Length).TrimStart('\\', '/'))
+                        .ToArray();
+                } catch { return new string[0]; }
+            }, token);
+
+            if (token.IsCancellationRequested) return;
+
+            MentionListView.ItemsSource = files;
+            MentionPopupBorder.Visibility = files.Any() ? Visibility.Visible : Visibility.Collapsed;
+            if (files.Any()) MentionListView.SelectedIndex = 0;
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void InputTextBox_PreviewKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (_isMentioning && MentionPopupBorder.Visibility == Visibility.Visible)
+        {
+            if (e.Key == Windows.System.VirtualKey.Down)
+            {
+                if (MentionListView.SelectedIndex < MentionListView.Items.Count - 1) MentionListView.SelectedIndex++;
+                e.Handled = true;
+            }
+            else if (e.Key == Windows.System.VirtualKey.Up)
+            {
+                if (MentionListView.SelectedIndex > 0) MentionListView.SelectedIndex--;
+                e.Handled = true;
+            }
+            else if (e.Key == Windows.System.VirtualKey.Enter || e.Key == Windows.System.VirtualKey.Tab)
+            {
+                if (MentionListView.SelectedItem is string selected) ConfirmMention(selected);
+                e.Handled = true;
+            }
+            else if (e.Key == Windows.System.VirtualKey.Escape)
+            {
+                CancelMentionMode();
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Windows.System.VirtualKey.Enter && !Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
+        {
+            SendButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+        }
+    }
+
+    private void MentionListView_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is string selected) ConfirmMention(selected);
+    }
+
+    private void ConfirmMention(string filePath)
+    {
+        if (!_isMentioning) return;
+        
+        string text = InputTextBox.Text;
+        int caret = InputTextBox.SelectionStart;
+        
+        string newText = text.Remove(_mentionStartIndex, caret - _mentionStartIndex);
+        InputTextBox.Text = newText;
+        InputTextBox.SelectionStart = _mentionStartIndex;
+        
+        if (!AttachedFiles.Contains(filePath)) AttachedFiles.Add(filePath);
+        
+        CancelMentionMode();
+    }
+
+    private void RemoveContextChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.CommandParameter is string file)
+        {
+            AttachedFiles.Remove(file);
         }
     }
 
@@ -112,15 +270,34 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(InputTextBox.Text)) return;
+        if (string.IsNullOrWhiteSpace(InputTextBox.Text) && AttachedFiles.Count == 0) return;
 
         string userText = InputTextBox.Text;
+        
+        _cts = new CancellationTokenSource();
+        
         InputTextBox.Text = string.Empty;
         InputTextBox.IsEnabled = false;
 
+        SendButton.Visibility = Visibility.Visible;
+        MicButton.Visibility = Visibility.Collapsed;
+
+        string fullMessageToAI = userText;
+        if (AttachedFiles.Count > 0)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var file in AttachedFiles)
+            {
+                string path = System.IO.Path.Combine(_agentManager.WorkspaceDirectory, file);
+                string content = NativeTools.ReadFile(path);
+                sb.AppendLine($"<file path=\"{file}\">\n{content}\n</file>");
+            }
+            fullMessageToAI = $"{sb}\nUser Message:\n{userText}";
+        }
+
         ChatHistory.Add(new TextMessageModel { Role = "User", Content = userText, Alignment = HorizontalAlignment.Right, BackgroundBrush = UserBrush });
         
-        _cts = new CancellationTokenSource();
+        AttachedFiles.Clear();
 
         // Start the elapsed-time timer that renders "Elapsed: mm:ss".
         _elapsedStopwatch.Restart();
@@ -141,7 +318,7 @@ public sealed partial class MainWindow : Window
 
         var token = _cts.Token;
         string finalResponse = await _agentManager.ProcessMessageAsync(
-            userText, 
+            fullMessageToAI, 
             (status) =>
             {
                 DispatcherQueue.TryEnqueue(() =>
