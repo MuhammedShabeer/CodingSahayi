@@ -120,6 +120,41 @@ public class NativeTools
         }
     }
 
+    public static string SearchDirectory(string directoryPath, string searchPattern = "*")
+    {
+        try
+        {
+            if (!Directory.Exists(directoryPath)) return $"Error: Directory not found at {directoryPath}";
+            
+            var files = Directory.GetFiles(directoryPath, searchPattern, SearchOption.AllDirectories);
+            if (files.Length == 0) return "No files found matching the pattern.";
+            
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Found {files.Length} file(s):");
+            foreach (var f in files)
+            {
+                // Make relative to the search root for cleaner output
+                string relPath = f.StartsWith(directoryPath, StringComparison.OrdinalIgnoreCase) 
+                    ? f.Substring(directoryPath.Length).TrimStart('\\', '/') 
+                    : f;
+                sb.AppendLine($"- {relPath}");
+            }
+            return sb.ToString();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return $"Access denied: {ex.Message}";
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            return $"Directory not found: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Error searching directory: {ex.Message}";
+        }
+    }
+
     public static string SearchCode(string directoryPath, string searchQuery, string fileExtensionFilter = "*.*")
     {
         try

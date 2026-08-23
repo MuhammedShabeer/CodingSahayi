@@ -58,6 +58,11 @@ public class AgentContextManager
             BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"workingDirectory\":{\"type\":\"string\"},\"timeoutSeconds\":{\"type\":\"integer\"}},\"required\":[\"command\"]}")
         ));
         _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
+            "search_directory",
+            "Recursively searches a directory for files matching a pattern.",
+            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"searchPattern\":{\"type\":\"string\"}},\"required\":[\"path\"]}")
+        ));
+        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
             "batch_patch_file",
             "Applies multiple patches to one or more files in a single call. Use this to fix ALL errors at once instead of patching one at a time. Each patch object has filePath, targetSnippet, and replacementSnippet.",
             BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"patches\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"targetSnippet\":{\"type\":\"string\"},\"replacementSnippet\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"targetSnippet\",\"replacementSnippet\"]}}},\"required\":[\"patches\"]}")
@@ -247,6 +252,12 @@ public class AgentContextManager
                         args.GetProperty("searchQuery").GetString() ?? "",
                         args.TryGetProperty("fileExtensionFilter", out var fe) ? fe.GetString() : "*.*");
                     if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "search_directory":
+                    string sPath = args.TryGetProperty("path", out var sp) ? sp.GetString() : "";
+                    string sPattern = args.TryGetProperty("searchPattern", out var spt) ? spt.GetString() ?? "*" : "*";
+                    toolResult = NativeTools.SearchDirectory(ResolvePath(sPath), sPattern);
+                    if (toolResult.StartsWith("Error") || toolResult.StartsWith("Access denied") || toolResult.StartsWith("Directory not found")) success = false;
                     break;
                 case "execute_terminal":
                     string wdPath = args.TryGetProperty("workingDirectory", out var wd) ? wd.GetString() : null;

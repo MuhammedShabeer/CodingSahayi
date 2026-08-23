@@ -87,6 +87,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void InputTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(InputTextBox.Text))
+        {
+            SendButton.Visibility = Visibility.Collapsed;
+            MicButton.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            SendButton.Visibility = Visibility.Visible;
+            MicButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private async void SendButton_Click(object sender, RoutedEventArgs e)
     {
         // If a generation is in progress, Stop it instead of sending new text.
@@ -115,12 +129,13 @@ public sealed partial class MainWindow : Window
         _elapsedTimer.Tick += (s, ev) =>
         {
             TimeSpan ts = _elapsedStopwatch.Elapsed;
-            SendButton.Content = $"Stop ({ts.Minutes:D2}:{ts.Seconds:D2})";
+            ExecutionTimerText.Text = $"Time: {ts.Minutes:D2}:{ts.Seconds:D2}";
         };
         _elapsedTimer.Start();
 
         // Change the button to act as a Stop control.
-        SendButton.Content = "Stop (00:00)"; ExecutionTimerText.Text = "Time: 00:00";
+        SendIcon.Symbol = Symbol.Stop;
+        ExecutionTimerText.Text = "Time: 00:00";
 
         StatusText.Text = "Thinking...";
 
@@ -188,7 +203,14 @@ public sealed partial class MainWindow : Window
             ScrollToBottom();
 
             InputTextBox.IsEnabled = true;
-            SendButton.Content = "Send";
+            SendIcon.Symbol = Symbol.Send;
+            
+            if (string.IsNullOrWhiteSpace(InputTextBox.Text))
+            {
+                SendButton.Visibility = Visibility.Collapsed;
+                MicButton.Visibility = Visibility.Visible;
+            }
+            
             _cts?.Dispose();
             _cts = null;
         });
