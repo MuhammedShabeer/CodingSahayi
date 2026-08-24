@@ -74,9 +74,15 @@ public static class SettingsManager
         get
         {
             var json = LocalSettings.Values["AvailableModels"] as string;
-            if (string.IsNullOrEmpty(json)) return new List<string>(DefaultModels);
-            try { return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>(DefaultModels); }
-            catch { return new List<string>(DefaultModels); }
+            List<string> list = new List<string>(DefaultModels);
+            if (!string.IsNullOrEmpty(json))
+            {
+                try { list = JsonSerializer.Deserialize<List<string>>(json) ?? list; }
+                catch { }
+            }
+            if (!list.Contains("Hybrid Router (Auto)")) list.Insert(0, "Hybrid Router (Auto)");
+            if (!list.Contains("Local Model Only")) list.Insert(1, "Local Model Only");
+            return list;
         }
         set => LocalSettings.Values["AvailableModels"] = JsonSerializer.Serialize(value);
     }

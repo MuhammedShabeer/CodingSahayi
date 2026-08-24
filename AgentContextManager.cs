@@ -109,13 +109,21 @@ public class AgentContextManager
     {
         var apiKey = SettingsManager.SecureApiKey;
         var endpoint = SettingsManager.ApiEndpoint;
+        if (!endpoint.EndsWith("/")) endpoint += "/";
+        
         var model = SettingsManager.ModelName;
+        if (model == "Hybrid Router (Auto)" || model == "Local Model Only")
+        {
+            model = "anthropic/claude-3.5-sonnet-20240620"; // Fallback for the cloud client
+        }
         
         var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(endpoint) });
         _cloudApiClient = client.GetChatClient(model);
         
         var localApiKey = SettingsManager.LocalApiKey;
         var localEndpoint = SettingsManager.LocalApiBaseUrl;
+        if (!localEndpoint.EndsWith("/")) localEndpoint += "/";
+        
         var localModel = SettingsManager.LocalModelName;
         
         var localClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(localApiKey), new OpenAIClientOptions { Endpoint = new Uri(localEndpoint) });
@@ -201,33 +209,49 @@ public class AgentContextManager
         // --- ROUTING PHASE ---
         string routeDecision = "API";
         ChatClient activeClient = _cloudApiClient;
+        string currentModel = SettingsManager.ModelName;
         
-        onStatusUpdate("Checking local model availability...");
-        bool localAvailable = await IsLocalAvailableAsync();
-        
-        if (localAvailable)
+        if (currentModel == "Local Model Only")
         {
-            onStatusUpdate("Routing task...");
-            var (route, plan) = await PlanAndRouteTask(userMessage, cancellationToken);
-            routeDecision = route;
+            routeDecision = "LOCAL";
+            activeClient = _localApiClient;
+            onStatusUpdate("Using LOCAL model...");
+        }
+        else if (currentModel == "Hybrid Router (Auto)")
+        {
+            onStatusUpdate("Checking local model availability...");
+            bool localAvailable = await IsLocalAvailableAsync();
             
-            if (routeDecision == "LOCAL")
+            if (localAvailable)
             {
-                activeClient = _localApiClient;
-                onStatusUpdate(!string.IsNullOrEmpty(plan) 
-                    ? $"Routing via LOCAL model — {plan}" 
-                    : "Routing via LOCAL model...");
+                onStatusUpdate("Routing task...");
+                var (route, plan) = await PlanAndRouteTask(userMessage, cancellationToken);
+                routeDecision = route;
+                
+                if (routeDecision == "LOCAL")
+                {
+                    activeClient = _localApiClient;
+                    onStatusUpdate(!string.IsNullOrEmpty(plan) 
+                        ? $"Routing via LOCAL model — {plan}" 
+                        : "Routing via LOCAL model...");
+                }
+                else
+                {
+                    onStatusUpdate(!string.IsNullOrEmpty(plan) 
+                        ? $"Routing via CLOUD API — {plan}" 
+                        : "Routing via CLOUD API...");
+                }
             }
             else
             {
-                onStatusUpdate(!string.IsNullOrEmpty(plan) 
-                    ? $"Routing via CLOUD API — {plan}" 
-                    : "Routing via CLOUD API...");
+                onStatusUpdate("Local model offline, using CLOUD API...");
             }
         }
         else
         {
-            onStatusUpdate("Local model offline, using CLOUD API...");
+            onStatusUpdate("Using CLOUD API...");
+            activeClient = _cloudApiClient;
+            routeDecision = "API";
         }
 
         // --- AGENTIC LOOP ---
