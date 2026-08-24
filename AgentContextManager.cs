@@ -117,7 +117,9 @@ public class AgentContextManager
             model = "anthropic/claude-3.5-sonnet-20240620"; // Fallback for the cloud client
         }
         
-        var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(endpoint) });
+        var cloudOptions = new OpenAIClientOptions { Endpoint = new Uri(endpoint) };
+        cloudOptions.NetworkTimeout = TimeSpan.FromMinutes(10);
+        var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), cloudOptions);
         _cloudApiClient = client.GetChatClient(model);
         
         var localApiKey = SettingsManager.LocalApiKey;
@@ -126,7 +128,9 @@ public class AgentContextManager
         
         var localModel = SettingsManager.LocalModelName;
         
-        var localClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(localApiKey), new OpenAIClientOptions { Endpoint = new Uri(localEndpoint) });
+        var localOptions = new OpenAIClientOptions { Endpoint = new Uri(localEndpoint) };
+        localOptions.NetworkTimeout = TimeSpan.FromMinutes(10);
+        var localClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(localApiKey), localOptions);
         _localApiClient = localClient.GetChatClient(localModel);
     }
 
