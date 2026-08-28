@@ -5,9 +5,17 @@ using System.Threading.Tasks;
 
 namespace CodingSahayi;
 
+public enum TaskPriority
+{
+    High,
+    Medium,
+    Low
+}
+
 public class SwarmTask
 {
     public string Description { get; set; } = string.Empty;
+    public TaskPriority Priority { get; set; } = TaskPriority.Medium;
 }
 
 public class SwarmOrchestrator
@@ -48,6 +56,9 @@ public class SwarmOrchestrator
         {
             tasks.Add(new SwarmTask { Description = planResult });
         }
+
+        // Process highest priority first (High = 0, Medium = 1, Low = 2)
+        tasks.Sort((a, b) => a.Priority.CompareTo(b.Priority));
 
         foreach (var task in tasks)
         {

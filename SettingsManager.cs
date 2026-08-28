@@ -17,7 +17,7 @@ public static class SettingsManager
 
     public static string ApiEndpoint
     {
-        get => LocalSettings.Values["ApiEndpoint"] as string ?? "https://integrate.api.nvidia.com/v1";
+        get => LocalSettings.Values["ApiEndpoint"] as string ?? "https://openrouter.ai/api/v1";
         set => LocalSettings.Values["ApiEndpoint"] = value;
     }
 

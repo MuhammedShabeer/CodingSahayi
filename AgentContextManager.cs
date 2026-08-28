@@ -17,7 +17,7 @@ public class AgentContextManager
     
     private const int MaxContextMessages = 20;
 
-    public string WorkspaceDirectory { get; set; } = AppContext.BaseDirectory;
+    public string WorkspaceDirectory { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
     public delegate void ToolStartHandler(string toolCallId, string toolName, string arguments);
     public delegate void ToolEndHandler(string toolCallId, string output, bool success);
