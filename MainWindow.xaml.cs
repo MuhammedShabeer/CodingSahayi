@@ -78,6 +78,8 @@ public sealed partial class MainWindow : Window
         ModelSelector.SelectedItem = SettingsManager.ModelName;
         ModelSelector.SelectionChanged += ModelSelector_SelectionChanged;
 
+        this.Activated += MainWindow_Activated;
+
         ContextChipsControl.ItemsSource = AttachedFiles;
         AttachedFiles.CollectionChanged += (s, e) => 
         {
@@ -130,6 +132,12 @@ public sealed partial class MainWindow : Window
                 Tag = proj 
             };
             
+            var projectFlyout = new MenuFlyout();
+            var deleteProjectItem = new MenuFlyoutItem { Text = "Delete", Icon = new SymbolIcon(Symbol.Delete), Tag = proj };
+            deleteProjectItem.Click += DeleteNavItem_Click;
+            projectFlyout.Items.Add(deleteProjectItem);
+            parentItem.ContextFlyout = projectFlyout;
+            
             if (proj.Conversations != null)
             {
                 foreach (var conv in proj.Conversations)
@@ -140,6 +148,13 @@ public sealed partial class MainWindow : Window
                         Icon = new SymbolIcon { Symbol = Symbol.Message },
                         Tag = conv.Id
                     };
+                    
+                    var convFlyout = new MenuFlyout();
+                    var deleteConvItem = new MenuFlyoutItem { Text = "Delete", Icon = new SymbolIcon(Symbol.Delete), Tag = conv };
+                    deleteConvItem.Click += DeleteNavItem_Click;
+                    convFlyout.Items.Add(deleteConvItem);
+                    childItem.ContextFlyout = convFlyout;
+                    
                     parentItem.MenuItems.Add(childItem);
                 }
             }
@@ -149,6 +164,72 @@ public sealed partial class MainWindow : Window
         if (ProjectNav.SelectedItem == null && ProjectNav.MenuItems.Count > 0)
         {
             ProjectNav.SelectedItem = ProjectNav.MenuItems[0];
+        }
+    }
+
+    private void DeleteNavItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem menuItem)
+        {
+            using var db = new CodingSahayi.Data.AppDbContext();
+            bool itemsChanged = false;
+
+            if (menuItem.Tag is CodingSahayi.Data.Project project)
+            {
+                if (db.Projects.Count() <= 1)
+                {
+                    StatusText.Text = "Cannot delete the last remaining project.";
+                    return;
+                }
+                var p = db.Projects.Find(project.Id);
+                if (p != null)
+                {
+                    db.Projects.Remove(p);
+                    db.SaveChanges();
+                    itemsChanged = true;
+                }
+            }
+            else if (menuItem.Tag is CodingSahayi.Data.Conversation conv)
+            {
+                var c = db.Conversations.Find(conv.Id);
+                if (c != null)
+                {
+                    db.Conversations.Remove(c);
+                    db.SaveChanges();
+                    itemsChanged = true;
+                    
+                    if (_activeConversationId == conv.Id)
+                    {
+                        _activeConversationId = null;
+                        ChatHistory.Clear();
+                    }
+                }
+            }
+
+            if (itemsChanged)
+            {
+                LoadProjects();
+            }
+        }
+    }
+
+    private bool _diagnosticsRun = false;
+    private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+    {
+        if (_diagnosticsRun) return;
+        _diagnosticsRun = true;
+        
+        var missingDeps = await StartupDiagnostics.RunChecksAsync();
+        if (missingDeps.Count > 0)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Missing Dependencies Detected",
+                Content = "The following dependencies are required for some features:\n\n" + string.Join("\n", missingDeps),
+                CloseButtonText = "I Understand",
+                XamlRoot = this.Content.XamlRoot
+            };
+            await dialog.ShowAsync();
         }
     }
 

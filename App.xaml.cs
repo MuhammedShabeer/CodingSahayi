@@ -1,4 +1,4 @@
-﻿using Windows.ApplicationModel;
+using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Shapes;
+using Serilog;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -21,7 +22,7 @@ namespace CodingSahayi;
 /// </summary>
 public partial class App : Application
 {
-    private Window? _window;
+    public Window? _window;
     
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
@@ -30,6 +31,14 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        
+        Serilog.Log.Logger = new Serilog.LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.Console()
+            .WriteTo.File(System.IO.Path.Combine(Windows.Storage.ApplicationData.Current.LocalFolder.Path, "logs", "codingsahayi-.txt"), rollingInterval: Serilog.RollingInterval.Day)
+            .CreateLogger();
+            
+        Serilog.Log.Information("CodingSahayi Application Starting...");
     }
 
     /// <summary>

@@ -22,55 +22,102 @@ public class AgentContextManager
     public delegate void ToolStartHandler(string toolCallId, string toolName, string arguments);
     public delegate void ToolEndHandler(string toolCallId, string output, bool success);
 
-    public AgentContextManager()
+    private readonly string _systemPrompt;
+
+    public AgentContextManager(string systemPrompt = null, IEnumerable<string> allowedTools = null)
     {
+        _systemPrompt = systemPrompt ?? SettingsManager.SystemPrompt;
         _chatOptions = new ChatCompletionOptions
         {
             AllowParallelToolCalls = false
         };
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "read_file",
-            "Reads a file from the disk.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"}},\"required\":[\"filePath\"]}")
-        ));
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "write_file",
-            "Writes content to a file on the disk.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"content\"]}")
-        ));
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "patch_file",
-            "Replaces a specific snippet of text in a file with a new snippet.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"targetSnippet\":{\"type\":\"string\"},\"replacementSnippet\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"targetSnippet\",\"replacementSnippet\"]}")
-        ));
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "list_directory",
-            "Lists files and folders in a directory.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"directoryPath\":{\"type\":\"string\"},\"maxDepth\":{\"type\":\"integer\"}},\"required\":[\"directoryPath\"]}")
-        ));
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "search_code",
-            "Searches for a string across files in a directory.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"searchQuery\":{\"type\":\"string\"},\"fileExtensionFilter\":{\"type\":\"string\"}},\"required\":[\"searchQuery\"]}")
-        ));
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "execute_terminal",
-            "Executes a command. You do not need to provide a working directory; it will automatically default to the user's selected workspace root.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"workingDirectory\":{\"type\":\"string\"},\"timeoutSeconds\":{\"type\":\"integer\"}},\"required\":[\"command\"]}")
-        ));
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "search_directory",
-            "Recursively searches a directory for files matching a pattern.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"searchPattern\":{\"type\":\"string\"}},\"required\":[\"path\"]}")
-        ));
-        _chatOptions.Tools.Add(ChatTool.CreateFunctionTool(
-            "batch_patch_file",
-            "Applies multiple patches to one or more files in a single call. Use this to fix ALL errors at once instead of patching one at a time. Each patch object has filePath, targetSnippet, and replacementSnippet.",
-            BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"patches\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"targetSnippet\":{\"type\":\"string\"},\"replacementSnippet\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"targetSnippet\",\"replacementSnippet\"]}}},\"required\":[\"patches\"]}")
-        ));
+
+        var allTools = new List<ChatTool>
+        {
+            ChatTool.CreateFunctionTool(
+                "read_file",
+                "Reads a file from the disk.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"}},\"required\":[\"filePath\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "write_file",
+                "Writes content to a file on the disk.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"content\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"content\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "patch_file",
+                "Replaces a specific snippet of text in a file with a new snippet.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"targetSnippet\":{\"type\":\"string\"},\"replacementSnippet\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"targetSnippet\",\"replacementSnippet\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "list_directory",
+                "Lists files and folders in a directory.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"directoryPath\":{\"type\":\"string\"},\"maxDepth\":{\"type\":\"integer\"}},\"required\":[\"directoryPath\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "search_code",
+                "Searches for a string across files in a directory.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"searchQuery\":{\"type\":\"string\"},\"fileExtensionFilter\":{\"type\":\"string\"}},\"required\":[\"searchQuery\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "execute_terminal",
+                "Executes a command. You do not need to provide a working directory; it will automatically default to the user's selected workspace root.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"},\"workingDirectory\":{\"type\":\"string\"},\"timeoutSeconds\":{\"type\":\"integer\"}},\"required\":[\"command\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "search_directory",
+                "Recursively searches a directory for files matching a pattern.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"searchPattern\":{\"type\":\"string\"}},\"required\":[\"path\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "batch_patch_file",
+                "Applies multiple patches to one or more files in a single call. Use this to fix ALL errors at once instead of patching one at a time. Each patch object has filePath, targetSnippet, and replacementSnippet.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"patches\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"targetSnippet\":{\"type\":\"string\"},\"replacementSnippet\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"targetSnippet\",\"replacementSnippet\"]}}},\"required\":[\"patches\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "analyze_structure",
+                "Analyzes structural components (classes, functions, interfaces) of a specified source file based on its file extension.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"}},\"required\":[\"filePath\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "verify_syntax",
+                "Parses a source file based on its file extension and returns syntax errors with line numbers.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"}},\"required\":[\"filePath\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "resolve_symbol",
+                "Looks up the definition details of a specific symbol in a source file based on its file extension.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"filePath\":{\"type\":\"string\"},\"symbolName\":{\"type\":\"string\"}},\"required\":[\"filePath\",\"symbolName\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "semantic_code_search",
+                "Performs a semantic vector search across the code base using Ollama embeddings to find relevant code chunks.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"]}")
+            ),
+            ChatTool.CreateFunctionTool(
+                "run_tests",
+                "Runs tests in a specified directory using dotnet test in a PTY, returning formatted failure output or success.",
+                BinaryData.FromString("{\"type\":\"object\",\"properties\":{\"projectPath\":{\"type\":\"string\"}},\"required\":[\"projectPath\"]}")
+            )
+        };
+
+        if (allowedTools != null)
+        {
+            var allowedSet = new HashSet<string>(allowedTools);
+            foreach (var tool in allTools)
+            {
+                if (allowedSet.Contains(tool.FunctionName))
+                    _chatOptions.Tools.Add(tool);
+            }
+        }
+        else
+        {
+            foreach (var tool in allTools)
+                _chatOptions.Tools.Add(tool);
+        }
 
         InitializeClient();
-        _apiHistory.Add(new SystemChatMessage(SettingsManager.SystemPrompt));
+        _apiHistory.Add(new SystemChatMessage(_systemPrompt));
     }
 
     public void ReinitializeClient()
@@ -78,11 +125,11 @@ public class AgentContextManager
         InitializeClient();
         if (_apiHistory.Count > 0)
         {
-            _apiHistory[0] = new SystemChatMessage(SettingsManager.SystemPrompt);
+            _apiHistory[0] = new SystemChatMessage(_systemPrompt);
         }
         else
         {
-            _apiHistory.Add(new SystemChatMessage(SettingsManager.SystemPrompt));
+            _apiHistory.Add(new SystemChatMessage(_systemPrompt));
         }
     }
 
@@ -90,7 +137,7 @@ public class AgentContextManager
     {
         InitializeClient();
         _apiHistory.Clear();
-        _apiHistory.Add(new SystemChatMessage(SettingsManager.SystemPrompt));
+        _apiHistory.Add(new SystemChatMessage(_systemPrompt));
         
         foreach (var msg in dbMessages.OrderBy(m => m.Timestamp))
         {
@@ -207,6 +254,10 @@ public class AgentContextManager
         int maxIterations = 30,
         System.Threading.CancellationToken cancellationToken = default)
     {
+        Serilog.Log.Information("ProcessMessageAsync started. User message length: {Length}", userMessage.Length);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        
+        NativeTools._fileBackups.Clear();
         _apiHistory.Add(new UserChatMessage(userMessage));
         PruneContextIfNecessary();
 
@@ -238,6 +289,24 @@ public class AgentContextManager
                     onStatusUpdate(!string.IsNullOrEmpty(plan) 
                         ? $"Routing via LOCAL model — {plan}" 
                         : "Routing via LOCAL model...");
+                    
+                    // --- MEMORY BANK INJECTION ---
+                    try {
+                        using var db = new CodingSahayi.Data.AppDbContext();
+                        var activeProject = db.Projects.FirstOrDefault(p => p.WorkspacePath == WorkspaceDirectory);
+                        if (activeProject != null) {
+                            var pastLessons = db.ProjectKnowledgeBase.Where(k => k.ProjectId == activeProject.Id).Select(k => k.LearnedImplementation).ToList();
+                            if (pastLessons.Any()) {
+                                string appendedLessons = "\n\nProject Context & Past Lessons:\n" + string.Join("\n", pastLessons);
+                                if (_apiHistory.FirstOrDefault() is SystemChatMessage sysMsg) {
+                                    // Make sure we don't append it multiple times if it's already there
+                                    if (!sysMsg.Content[0].Text.Contains("Project Context & Past Lessons")) {
+                                        _apiHistory[0] = new SystemChatMessage(sysMsg.Content[0].Text + appendedLessons);
+                                    }
+                                }
+                            }
+                        }
+                    } catch { }
                 }
                 else
                 {
@@ -318,10 +387,81 @@ public class AgentContextManager
                             var argsStr = toolCall.FunctionArguments.ToString();
                             onToolStart?.Invoke(toolCall.Id, toolCall.FunctionName, argsStr);
 
-                            var args = JsonSerializer.Deserialize<JsonElement>(argsStr);
-                            var execution = ExecuteTool(toolCall.FunctionName, args, cancellationToken);
-                            toolResult = execution.result;
-                            success = execution.success;
+                            int retryCount = 0;
+                            bool toolIsModifying = toolCall.FunctionName == "patch_file" || toolCall.FunctionName == "write_file" || toolCall.FunctionName == "batch_patch_file";
+                            
+                            while (retryCount < 2)
+                            {
+                                var args = JsonSerializer.Deserialize<JsonElement>(argsStr);
+                                var execution = await ExecuteToolAsync(toolCall.FunctionName, args, cancellationToken);
+                                toolResult = execution.result;
+                                success = execution.success;
+                                
+                                if (toolIsModifying && success)
+                                {
+                                    string filePath = ResolvePath(args.TryGetProperty("filePath", out var fp) ? (fp.GetString() ?? "") : "");
+                                    if (toolCall.FunctionName == "batch_patch_file") {
+                                        if (args.TryGetProperty("patches", out var pArr) && pArr.ValueKind == JsonValueKind.Array && pArr.GetArrayLength() > 0)
+                                            filePath = ResolvePath(pArr[0].GetProperty("filePath").GetString() ?? "");
+                                    }
+                                    
+                                    if (!string.IsNullOrEmpty(filePath) && System.IO.File.Exists(filePath) && filePath.EndsWith(".cs"))
+                                    {
+                                        bool patchValid = await EvaluatePatchAsync(filePath, argsStr);
+                                        if (!patchValid)
+                                        {
+                                            retryCount++;
+                                            if (retryCount >= 2)
+                                            {
+                                                NativeTools.RollbackChanges();
+                                                toolResult = $"CRITICAL FAILURE: Patch was invalid or caused syntax errors. Rolled back all changes.";
+                                                success = false;
+                                                finalResponse = toolResult;
+                                                break;
+                                            }
+                                            else
+                                            {
+                                                string syntaxStatus = WorkspaceCodeAnalysisService.VerifySyntax(filePath);
+                                                NativeTools.RollbackChanges();
+                                                var retryHistory = new List<ChatMessage>(_apiHistory);
+                                                retryHistory.Add(new ToolChatMessage(toolCall.Id, $"Error: The patch caused syntax errors:\n{syntaxStatus}\nPlease generate a corrected tool call."));
+                                                var retryResp = await activeClient.CompleteChatAsync(retryHistory, _chatOptions, cancellationToken);
+                                                if (retryResp.Value.FinishReason == ChatFinishReason.ToolCalls && retryResp.Value.ToolCalls.Count > 0)
+                                                {
+                                                    argsStr = retryResp.Value.ToolCalls[0].FunctionArguments.ToString();
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // --- MEMORY BANK EXTRACTION ---
+                                if (routeDecision == "API" && toolCall.FunctionName == "execute_terminal" && argsStr.Contains("dotnet build") && success && toolResult.Contains("Build succeeded"))
+                                {
+                                    _ = Task.Run(async () => {
+                                        try {
+                                            var summaryPrompt = "Summarize the architectural change you just made in 1-2 sentences. Focus on file structure and logic.";
+                                            var bgHistory = new List<ChatMessage>(_apiHistory) { new UserChatMessage(summaryPrompt) };
+                                            var resp = await _cloudApiClient.CompleteChatAsync(bgHistory, new ChatCompletionOptions { AllowParallelToolCalls = false });
+                                            var summaryResponse = resp.Value.Content[0].Text;
+                                            
+                                            using var bgDb = new CodingSahayi.Data.AppDbContext();
+                                            var proj = bgDb.Projects.FirstOrDefault(p => p.WorkspacePath == WorkspaceDirectory);
+                                            if (proj != null) {
+                                                bgDb.ProjectKnowledgeBase.Add(new CodingSahayi.Data.ProjectKnowledge {
+                                                    ProjectId = proj.Id,
+                                                    TaskDescription = userMessage,
+                                                    LearnedImplementation = summaryResponse,
+                                                    DateLearned = DateTime.UtcNow
+                                                });
+                                                bgDb.SaveChanges();
+                                            }
+                                        } catch { }
+                                    });
+                                }
+                                break;
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -354,7 +494,7 @@ public class AgentContextManager
                                 string toolId = "fallback_" + Guid.NewGuid().ToString().Substring(0, 8);
                                 
                                 onToolStart?.Invoke(toolId, toolName, argsStr);
-                                var execution = ExecuteTool(toolName, paramsProp, cancellationToken);
+                                var execution = await ExecuteToolAsync(toolName, paramsProp, cancellationToken);
                                 onToolEnd?.Invoke(toolId, execution.result, execution.success);
                                 
                                 _apiHistory.Add(new UserChatMessage($"[Tool Execution Result]:\n{execution.result}"));
@@ -370,15 +510,63 @@ public class AgentContextManager
             }
             catch (Exception ex)
             {
+                Serilog.Log.Error(ex, "Error in agent loop");
                 finalResponse = $"**Error:** {ex.Message}";
                 requiresAction = false;
             }
         }
         
+        if (NativeTools._fileBackups.Count > 0 && !finalResponse.Contains("**Error:**") && !finalResponse.Contains("hit my iteration limit"))
+        {
+            var diffs = string.Join("\n\n", NativeTools._fileBackups.Keys.Select(k => $"File: {k}\n(Modified)"));
+            _ = Task.Run(async () => {
+                try {
+                    var summaryPrompt = $"Generate a concise 'Design Pattern/Implementation Lesson' summarizing these changes based on the user prompt: '{userMessage}'. Modified files:\n{diffs}";
+                    var bgHistory = new List<ChatMessage>(_apiHistory) { new UserChatMessage(summaryPrompt) };
+                    var resp = await _localApiClient.CompleteChatAsync(bgHistory, new ChatCompletionOptions { AllowParallelToolCalls = false });
+                    var summaryResponse = resp.Value.Content[0].Text;
+                    
+                    using var bgDb = new CodingSahayi.Data.AppDbContext();
+                    var proj = bgDb.Projects.FirstOrDefault(p => p.WorkspacePath == WorkspaceDirectory);
+                    if (proj != null) {
+                        bgDb.ProjectKnowledgeBase.Add(new CodingSahayi.Data.ProjectKnowledge {
+                            ProjectId = proj.Id,
+                            TaskDescription = userMessage,
+                            LearnedImplementation = summaryResponse,
+                            DateLearned = DateTime.UtcNow
+                        });
+                        bgDb.SaveChanges();
+                    }
+                } catch { }
+            });
+        }
+        
+        stopwatch.Stop();
+        Serilog.Log.Information("ProcessMessageAsync completed. Final response length: {Length}. Routing: {Route}. Elapsed: {ElapsedMs}ms", finalResponse.Length, routeDecision, stopwatch.ElapsedMilliseconds);
         return finalResponse;
     }
     
-    private (string result, bool success) ExecuteTool(string toolName, JsonElement args, System.Threading.CancellationToken cancellationToken = default)
+    private async Task<bool> EvaluatePatchAsync(string filePath, string proposedPatch)
+    {
+        string syntaxStatus = WorkspaceCodeAnalysisService.VerifySyntax(filePath);
+        if (syntaxStatus == "Syntax OK" || syntaxStatus.Contains("Syntax OK - Fallback")) return true;
+
+        var systemPrompt = new SystemChatMessage("You are a code critic. The following file has syntax errors after a patch. Analyze the errors and the proposed patch. Reply with ONLY 'REJECT' if the patch is broken, or 'ACCEPT' if the error is a false positive.");
+        var userPrompt = new UserChatMessage($"File: {filePath}\nErrors:\n{syntaxStatus}\nPatch:\n{proposedPatch}");
+        
+        try
+        {
+            var resp = await _localApiClient.CompleteChatAsync(new List<ChatMessage> { systemPrompt, userPrompt });
+            if (resp.Value.Content[0].Text.Contains("REJECT")) return false;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<(string result, bool success)> ExecuteToolAsync(string toolName, JsonElement args, System.Threading.CancellationToken cancellationToken = default)
     {
         string toolResult = string.Empty;
         bool success = true;
@@ -391,17 +579,66 @@ public class AgentContextManager
                     if (toolResult.StartsWith("Error")) success = false;
                     break;
                 case "write_file":
-                    toolResult = NativeTools.WriteFile(
-                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
-                        args.GetProperty("content").GetString() ?? "");
-                    if (toolResult.StartsWith("Error")) success = false;
-                    break;
                 case "patch_file":
-                    toolResult = NativeTools.PatchFile(
-                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""), 
-                        args.GetProperty("targetSnippet").GetString() ?? "", 
-                        args.GetProperty("replacementSnippet").GetString() ?? "");
-                    if (toolResult.StartsWith("Error")) success = false;
+                    string wFilePath = ResolvePath(args.GetProperty("filePath").GetString() ?? "");
+                    string newText = "";
+                    if (toolName == "write_file")
+                    {
+                        newText = NativeTools.WriteFile(wFilePath, args.GetProperty("content").GetString() ?? "");
+                    }
+                    else
+                    {
+                        newText = NativeTools.PatchFile(
+                            wFilePath, 
+                            args.GetProperty("targetSnippet").GetString() ?? "", 
+                            args.GetProperty("replacementSnippet").GetString() ?? "");
+                        if (newText.StartsWith("Error"))
+                        {
+                            toolResult = newText;
+                            success = false;
+                            break;
+                        }
+                    }
+
+                    string oldText = System.IO.File.Exists(wFilePath) ? System.IO.File.ReadAllText(wFilePath) : "";
+                    
+                    var diff = DiffManager.GenerateDiff(oldText, newText);
+                    var tcs = new TaskCompletionSource<bool>();
+                    
+                    var dispatcher = (Microsoft.UI.Xaml.Application.Current as App)?._window?.DispatcherQueue;
+                    if (dispatcher != null)
+                    {
+                        dispatcher.TryEnqueue(async () =>
+                        {
+                            var dialog = new DiffReviewDialog(diff);
+                            dialog.XamlRoot = (Microsoft.UI.Xaml.Application.Current as App)?._window?.Content.XamlRoot;
+                            await dialog.ShowAsync();
+                            tcs.SetResult(dialog.IsAccepted);
+                        });
+                        
+                        bool accepted = await tcs.Task;
+                        if (accepted)
+                        {
+                            if (!NativeTools._fileBackups.ContainsKey(wFilePath))
+                                NativeTools._fileBackups[wFilePath] = oldText;
+
+                            var dir = System.IO.Path.GetDirectoryName(wFilePath);
+                            if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+                            System.IO.File.WriteAllText(wFilePath, newText);
+                            toolResult = $"Success: Applied changes to {wFilePath}";
+                        }
+                        else
+                        {
+                            toolResult = $"Error: User rejected the changes to {wFilePath}.";
+                            success = false;
+                        }
+                    }
+                    else
+                    {
+                        // Fallback if UI is not available
+                        System.IO.File.WriteAllText(wFilePath, newText);
+                        toolResult = $"Success: Applied changes to {wFilePath} (Auto-accepted)";
+                    }
                     break;
                 case "list_directory":
                     string dirPath = args.TryGetProperty("directoryPath", out var p) ? p.GetString() ?? WorkspaceDirectory : WorkspaceDirectory;
@@ -432,6 +669,28 @@ public class AgentContextManager
                         GetIntProperty(args, "timeoutSeconds", 45),
                         cancellationToken);
                     if (toolResult.StartsWith("Failed") || toolResult.Contains("TIMED OUT") || toolResult.StartsWith("Cancelled")) success = false;
+                    break;
+                case "analyze_structure":
+                    toolResult = WorkspaceCodeAnalysisService.AnalyzeStructure(ResolvePath(args.GetProperty("filePath").GetString() ?? ""));
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "verify_syntax":
+                    toolResult = WorkspaceCodeAnalysisService.VerifySyntax(ResolvePath(args.GetProperty("filePath").GetString() ?? ""));
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "resolve_symbol":
+                    toolResult = WorkspaceCodeAnalysisService.ResolveSymbol(
+                        ResolvePath(args.GetProperty("filePath").GetString() ?? ""),
+                        args.GetProperty("symbolName").GetString() ?? "");
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "semantic_code_search":
+                    toolResult = NativeTools.SemanticCodeSearch(args.GetProperty("query").GetString() ?? "");
+                    if (toolResult.StartsWith("Error")) success = false;
+                    break;
+                case "run_tests":
+                    toolResult = await TestRunnerTool.RunTestsAsync(ResolvePath(args.GetProperty("projectPath").GetString() ?? ""));
+                    if (toolResult.Contains("Test Failures Detected") || toolResult.StartsWith("Error")) success = false;
                     break;
                 default:
                     if (toolName == "batch_patch_file")

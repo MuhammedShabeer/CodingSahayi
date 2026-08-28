@@ -8,6 +8,20 @@ namespace CodingSahayi;
 
 public class NativeTools
 {
+    public static Dictionary<string, string> _fileBackups = new();
+
+    public static void RollbackChanges()
+    {
+        foreach (var kvp in _fileBackups)
+        {
+            if (File.Exists(kvp.Key))
+            {
+                File.WriteAllText(kvp.Key, kvp.Value);
+            }
+        }
+        _fileBackups.Clear();
+    }
+
     public static string ReadFile(string filePath)
     {
         try
@@ -25,21 +39,7 @@ public class NativeTools
 
     public static string WriteFile(string filePath, string content)
     {
-        try
-        {
-            var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllText(filePath, content);
-            return $"Success: Wrote {content.Length} characters to {filePath}";
-        }
-        catch (Exception ex)
-        {
-            return $"Error writing file: {ex.Message}";
-        }
+        return content;
     }
 
     public static string PatchFile(string filePath, string targetSnippet, string replacementSnippet)
@@ -59,11 +59,11 @@ public class NativeTools
             int lastIndex = normalizedContent.LastIndexOf(normalizedTarget);
             bool hadMultiple = (firstIndex != lastIndex);
             
-            // Replace only the first occurrence
             string newContent = normalizedContent.Substring(0, firstIndex) 
                 + normalizedReplacement 
                 + normalizedContent.Substring(firstIndex + normalizedTarget.Length);
-            File.WriteAllText(filePath, newContent);
+            
+            return newContent;
             
             string msg = $"Success: Replaced snippet in {filePath}";
             if (hadMultiple) msg += " (Warning: snippet appeared multiple times, only replaced the FIRST occurrence. Use more context lines for precision.)";
@@ -274,6 +274,44 @@ public class NativeTools
         catch (Exception ex)
         {
             return $"Failed to start process: {ex.Message}";
+        }
+    }
+
+    public static string SemanticCodeSearch(string query)
+    {
+        try
+        {
+            var queryVector = VectorService.GetEmbeddingAsync(query).GetAwaiter().GetResult();
+            if (queryVector == null || queryVector.Length == 0)
+                return "Error: Could not generate embedding for query.";
+
+            using var db = new CodingSahayi.Data.AppDbContext();
+            var chunks = db.CodeChunks.ToList();
+
+            var scoredChunks = chunks.Select(c => {
+                float[] vector = string.IsNullOrEmpty(c.EmbeddingJson) ? Array.Empty<float>() : System.Text.Json.JsonSerializer.Deserialize<float[]>(c.EmbeddingJson) ?? Array.Empty<float>();
+                float score = VectorService.CosineSimilarity(queryVector, vector);
+                return (Chunk: c, Score: score);
+            })
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
+            .Take(3)
+            .ToList();
+
+            if (scoredChunks.Count == 0) return "No relevant code chunks found in the semantic database.";
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Top Semantic Search Results:");
+            foreach (var sc in scoredChunks)
+            {
+                sb.AppendLine($"--- File: {sc.Chunk.FilePath} (Score: {sc.Score:F3}) ---");
+                sb.AppendLine(sc.Chunk.Content);
+            }
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            return $"Error performing semantic search: {ex.Message}";
         }
     }
 }

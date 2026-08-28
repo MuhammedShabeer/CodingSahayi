@@ -41,4 +41,12 @@ namespace CodingSahayi.Data
         public string LearnedImplementation { get; set; } = string.Empty;
         public DateTime DateLearned { get; set; }
     }
+
+    public class CodeChunk
+    {
+        public int Id { get; set; }
+        public string FilePath { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public string EmbeddingJson { get; set; } = string.Empty;
+    }
 }
